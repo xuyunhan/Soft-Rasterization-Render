@@ -4,8 +4,8 @@
 // 数学库：此部分应该不用详解，熟悉 D3D 矩阵变换即可
 //=====================================================================
 typedef struct { float m[4][4]; } matrix_t;
-typedef struct { float x, y, z, w; } vector_t;
-typedef vector_t point_t;
+typedef struct { float x, y, z, w; } Pos;
+typedef Pos point_t;
 
 int CMID(int x, int min, int max) { return (x < min) ? min : ((x > max) ? max : x); }
 
@@ -13,13 +13,13 @@ int CMID(int x, int min, int max) { return (x < min) ? min : ((x > max) ? max : 
 float interp(float x1, float x2, float t) { return x1 + (x2 - x1) * t; }
 
 // | v |
-float vector_length(const vector_t *v) {
+float vector_length(const Pos *v) {
 	float sq = v->x * v->x + v->y * v->y + v->z * v->z;
 	return (float)sqrt(sq);
 }
 
 // z = x + y
-void vector_add(vector_t *z, const vector_t *x, const vector_t *y) {
+void vector_add(Pos *z, const Pos *x, const Pos *y) {
 	z->x = x->x + y->x;
 	z->y = x->y + y->y;
 	z->z = x->z + y->z;
@@ -27,7 +27,7 @@ void vector_add(vector_t *z, const vector_t *x, const vector_t *y) {
 }
 
 // z = x - y
-void vector_sub(vector_t *z, const vector_t *x, const vector_t *y) {
+void vector_sub(Pos *z, const Pos *x, const Pos *y) {
 	z->x = x->x - y->x;
 	z->y = x->y - y->y;
 	z->z = x->z - y->z;
@@ -35,12 +35,12 @@ void vector_sub(vector_t *z, const vector_t *x, const vector_t *y) {
 }
 
 // 矢量点乘
-float vector_dotproduct(const vector_t *x, const vector_t *y) {
+float vector_dotproduct(const Pos *x, const Pos *y) {
 	return x->x * y->x + x->y * y->y + x->z * y->z;
 }
 
 // 矢量叉乘
-void vector_crossproduct(vector_t *z, const vector_t *x, const vector_t *y) {
+void vector_crossproduct(Pos *z, const Pos *x, const Pos *y) {
 	float m1, m2, m3;
 	m1 = x->y * y->z - x->z * y->y;
 	m2 = x->z * y->x - x->x * y->z;
@@ -52,7 +52,7 @@ void vector_crossproduct(vector_t *z, const vector_t *x, const vector_t *y) {
 }
 
 // 矢量插值，t取值 [0, 1]
-void vector_interp(vector_t *z, const vector_t *x1, const vector_t *x2, float t) {
+void vector_interp(Pos *z, const Pos *x1, const Pos *x2, float t) {
 	z->x = interp(x1->x, x2->x, t);
 	z->y = interp(x1->y, x2->y, t);
 	z->z = interp(x1->z, x2->z, t);
@@ -60,7 +60,7 @@ void vector_interp(vector_t *z, const vector_t *x1, const vector_t *x2, float t)
 }
 
 // 矢量归一化
-void vector_normalize(vector_t *v) {
+void vector_normalize(Pos *v) {
 	float length = vector_length(v);
 	if (length != 0.0f) {
 		float inv = 1.0f / length;
@@ -113,7 +113,7 @@ void matrix_scale(matrix_t *c, const matrix_t *a, float f) {
 }
 
 // y = x * m
-void matrix_apply(vector_t *y, const vector_t *x, const matrix_t *m) {
+void matrix_apply(Pos *y, const Pos *x, const matrix_t *m) {
 	float X = x->x, Y = x->y, Z = x->z, W = x->w;
 	y->x = X * m->m[0][0] + Y * m->m[1][0] + Z * m->m[2][0] + W * m->m[3][0];
 	y->y = X * m->m[0][1] + Y * m->m[1][1] + Z * m->m[2][1] + W * m->m[3][1];
@@ -156,7 +156,7 @@ void matrix_set_scale(matrix_t *m, float x, float y, float z) {
 void matrix_set_rotate(matrix_t *m, float x, float y, float z, float theta) {
 	float qsin = (float)sin(theta * 0.5f);
 	float qcos = (float)cos(theta * 0.5f);
-	vector_t vec = { x, y, z, 1.0f };
+	Pos vec = { x, y, z, 1.0f };
 	float w = qcos;
 	vector_normalize(&vec);
 	x = vec.x * qsin;
@@ -177,8 +177,8 @@ void matrix_set_rotate(matrix_t *m, float x, float y, float z, float theta) {
 }
 
 // 设置摄像机
-void matrix_set_lookat(matrix_t *m, const vector_t *eye, const vector_t *at, const vector_t *up) {
-	vector_t xaxis, yaxis, zaxis;
+void matrix_set_lookat(matrix_t *m, const Pos *eye, const Pos *at, const Pos *up) {
+	Pos xaxis, yaxis, zaxis;
 
 	vector_sub(&zaxis, at, eye);
 	vector_normalize(&zaxis);

@@ -3,10 +3,17 @@
 #include "Show_Window.h"
 #include <Windows.h>
 #include <time.h>
+#include"FreeImage.h"
+
 typedef struct
 {
 	int r, g, b;
 }Color;
+
+typedef struct
+{
+	float u,v;
+}TexCoord;
 
 typedef struct
 {
@@ -15,32 +22,34 @@ typedef struct
 
 typedef struct
 {
-	vector_t pos;
+	Pos pos;
 	Color color;
+	TexCoord texcoord;
+	float rhw;
 }Vertex;
 
 Vertex cube[8] = 
 {
-	{ { 1, -1,  1, 1 },{ 1.0f, 0.2f, 0.2f } },
-	{ { -1, -1,  1, 1 },{ 0.2f, 1.0f, 0.2f } },
-	{ { -1,  1,  1, 1 },{ 0.2f, 0.2f, 1.0f } },
-	{ { 1,  1,  1, 1 },{ 1.0f, 0.2f, 1.0f } },
-	{ { 1, -1, -1, 1 },{ 1.0f, 1.0f, 0.2f } },
-	{ { -1, -1, -1, 1 },{ 0.2f, 1.0f, 1.0f } },
-	{ { -1,  1, -1, 1 },{ 1.0f, 0.3f, 0.3f } },
-	{ { 1,  1, -1, 1 },{ 0.2f, 1.0f, 0.3f } }
+	{ { 1, -1,  1, 1 },{ 1.0f, 0.2f, 0.2f } ,{0.0f,0.0f}},
+	{ { -1, -1,  1, 1 },{ 0.2f, 1.0f, 0.2f } ,{ 0.0f,0.0f } },
+	{ { -1,  1,  1, 1 },{ 0.2f, 0.2f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { 1,  1,  1, 1 },{ 1.0f, 0.2f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { 1, -1, -1, 1 },{ 1.0f, 1.0f, 0.2f } ,{ 0.0f,0.0f } },
+	{ { -1, -1, -1, 1 },{ 0.2f, 1.0f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { -1,  1, -1, 1 },{ 1.0f, 0.3f, 0.3f } ,{ 0.0f,0.0f } },
+	{ { 1,  1, -1, 1 },{ 0.2f, 1.0f, 0.3f } ,{ 0.0f,0.0f } }
 };
 
 Vertex cube_processed[8] =
 {
-	{ { 1, -1,  1, 1 },{ 1.0f, 0.2f, 0.2f } },
-	{ { -1, -1,  1, 1 },{ 0.2f, 1.0f, 0.2f } },
-	{ { -1,  1,  1, 1 },{ 0.2f, 0.2f, 1.0f } },
-	{ { 1,  1,  1, 1 },{ 1.0f, 0.2f, 1.0f } },
-	{ { 1, -1, -1, 1 },{ 1.0f, 1.0f, 0.2f } },
-	{ { -1, -1, -1, 1 },{ 0.2f, 1.0f, 1.0f } },
-	{ { -1,  1, -1, 1 },{ 1.0f, 0.3f, 0.3f } },
-	{ { 1,  1, -1, 1 },{ 0.2f, 1.0f, 0.3f } }
+	{ { 1, -1,  1, 1 },{ 1.0f, 0.2f, 0.2f } ,{ 0.0f,0.0f } },
+	{ { -1, -1,  1, 1 },{ 0.2f, 1.0f, 0.2f } ,{ 0.0f,0.0f } },
+	{ { -1,  1,  1, 1 },{ 0.2f, 0.2f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { 1,  1,  1, 1 },{ 1.0f, 0.2f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { 1, -1, -1, 1 },{ 1.0f, 1.0f, 0.2f } ,{ 0.0f,0.0f } },
+	{ { -1, -1, -1, 1 },{ 0.2f, 1.0f, 1.0f } ,{ 0.0f,0.0f } },
+	{ { -1,  1, -1, 1 },{ 1.0f, 0.3f, 0.3f } ,{ 0.0f,0.0f } },
+	{ { 1,  1, -1, 1 },{ 0.2f, 1.0f, 0.3f } ,{ 0.0f,0.0f } }
 };
 
 // const int a = 800 * 600;
@@ -93,8 +102,31 @@ void ApplyWVPTransform()//世界变换
 	ApplyClipping();//裁剪
 }
 
-void Barycentric(float x1,float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, int color)
+unsigned int GetTexture(float u, float v)
 {
+	return texbuffer[(int)u][(int)v];
+}
+void vertex_rhw_init(Vertex *v) {
+	float rhw = 1.0f / v->pos.w;
+	v->rhw = rhw;
+	v->texcoord.u *= rhw;
+	v->texcoord.v *= rhw;
+// 	v->color.r *= rhw;
+// 	v->color.g *= rhw;
+// 	v->color.b *= rhw;
+}
+
+void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
+{
+	float x1 = p1->pos.x;
+	float y1 = p1->pos.y;
+	float z1 = p1->pos.z;
+	float x2 = p2->pos.x;
+	float y2 = p2->pos.y;
+	float z2 = p2->pos.z;
+	float x3 = p3->pos.x;
+	float y3 = p3->pos.y;
+	float z3 = p3->pos.z;
 	float a, b, c;//方程系数
 //	平面可以由Ax + By + Cz + D = 0来表示，因此z = f(x, y) = (-Ax - By - D) / C。
 //	可以观察到，f(x + 1, y) – f(x, y) = -A / C，f(x, y + 1) – f(x, y) = -B / C，因此不必针对每个点都计算z值，只要有了三角形一个顶点的z值就可以用加减法算出其它点的z值。
@@ -105,6 +137,9 @@ void Barycentric(float x1,float y1, float z1, float x2, float y2, float z2, floa
 	float deltaZperX = -A / C;//以（x1,y1,z1）为起始点
 	float deltaZperY = -B / C;
 	float z = 0;
+	//纹理
+	float u, v;
+// 	float u1, v1, u2, v2, u3, v3;
 
 	for (int x = 0; x < 550; x++)
 	{
@@ -121,8 +156,12 @@ void Barycentric(float x1,float y1, float z1, float x2, float y2, float z2, floa
 				z = z1 + (x - x1) *deltaZperX + (y - y1)*deltaZperY;//算该三角形的Z值
 				if (z < (zbuffer[(int)x * 800 + (int)y]))//若离屏幕更近则显示否则舍弃
 				{
+					double zr = a*(1 / p1->pos.w) + b*(1 / p2->pos.w) + c*(1 / p3->pos.w);
+					u = ((a*(p1->texcoord.u / p1->pos.w) + b*(p3->texcoord.u / p2->pos.w) + c*(p3->texcoord.u / p3->pos.w)) / zr) * 255.0f;//w
+					v = ((a*(p1->texcoord.v / p1->pos.w) + b*(p2->texcoord.v / p2->pos.w) + c*(p3->texcoord.v / p3->pos.w)) / zr) * 255.0f;//h
 					zbuffer[(int)x*800+(int)y] = z;
-					framebufferPtr[x][y] = color;// SetPixel(GetCDC(), x, y, RGB(255, 255, 255));
+				//	framebufferPtr[x][y] = color;// SetPixel(GetCDC(), x, y, RGB(255, 255, 255));
+					framebufferPtr[x][y] = GetTexture(u, v);
 				}
 			}
 		}
@@ -139,27 +178,32 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
 
 	//背面剔除
 //	double z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x);
-	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x) < 0.0f)
+	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x) > 0.0f)
 	{
+
 		//开始光栅化
-		Barycentric(p1->pos.x, p1->pos.y, p1->pos.z, p2->pos.x, p2->pos.y, p2->pos.z,p3->pos.x, p3->pos.y, p3->pos.z, color);
+		Barycentric(p1, p2, p3, color);
 	}
 }
 
 void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的索引
 {
 	Vertex* p1 = &cube_processed[a], *p2 = &cube_processed[b], *p3 = &cube_processed[c], *p4 =& cube_processed[d];
-
-	DrawPrimitive(p1, p2, p3, color);//分成三角形图元绘制
-	DrawPrimitive(p3, p4, p1, color);
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
-// 	printf("\n");
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[d].pos.x, cube_processed[d].pos.y, cube_processed[d].pos.z, cube_processed[d].pos.w);
-// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
-// 	printf("\n");
+	p1->texcoord.u = 0, p1->texcoord.v = 0, p2->texcoord.u = 0, p2->texcoord.v = 1;
+	p3->texcoord.u = 1, p3->texcoord.v = 1, p4->texcoord.u = 1, p4->texcoord.v = 0;
+		vertex_rhw_init(p1);	// 初始化 w
+		vertex_rhw_init(p2);	// 初始化 w
+		vertex_rhw_init(p3);	// 初始化 w
+	DrawPrimitive(p3, p2, p1, color);//分成三角形图元绘制
+	DrawPrimitive(p1, p4, p3, color);
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
+	printf("\n");
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[d].pos.x, cube_processed[d].pos.y, cube_processed[d].pos.z, cube_processed[d].pos.w);
+	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
+	printf("\n");
 }
 
 void UpdateMVPMatrix()
@@ -168,22 +212,34 @@ void UpdateMVPMatrix()
 	matrix_mul(&m, &transformMatrix.world, &transformMatrix.view);
 	matrix_mul(&transformMatrix.transform, &m, &transformMatrix.projection);// transform = world * view * projection
 }
+
 void DrawCube(float self_angle, float cam_angle)
 {
 	ApplyWVPTransform();//顶点坐标从局部坐标系转到裁剪后的NDC
 	//开始光栅化
-	DrawPlane(2, 3, 0, 1, 100);
+	DrawPlane(2, 3, 0, 1, 100);//原来的
 	DrawPlane(7, 6, 5, 4, -250);
 	DrawPlane(0, 4, 5, 1, -50);
 	DrawPlane(1, 5, 6, 2, 200);
 	DrawPlane(3, 2, 6, 7, -550);
 	DrawPlane(3, 7, 4, 0, 0);
+
+// 	DrawPlane(2, 1, 0, 3, 100);
+
+
+// 	DrawPlane( 0, 1, 2, 3, 0);
+// 	DrawPlane( 4, 5, 6, 7, 0);
+// 	DrawPlane( 0, 4, 5, 1, 0);
+// 	DrawPlane( 1, 5, 6, 2, 0);
+// 	DrawPlane( 2, 6, 7, 3, 0);
+// 	DrawPlane( 3, 7, 4, 0, 0);
+
 }
 
 void RotateCube(float angle)
 {
 	matrix_t m;
-	matrix_set_rotate(&m, -1, -0.5,1, angle);//算旋转矩阵
+	matrix_set_rotate(&m, -0, -0,1, angle);//算旋转矩阵
 	transformMatrix.world = m;
 	UpdateMVPMatrix();//更新矩阵
 }
@@ -201,7 +257,7 @@ void BindFB(int width, int height, unsigned int *fb) {
 	int need = sizeof(void*) * (height * 2 + 1024) + width * height * 8;
 	char *ptr = (char*)malloc(need + 64);
 	char *framebuf, *zbuf;
-	int j;
+	int i,j;
 	for (size_t i = 0; i < 800; i++)
 	{
 		for (size_t j = 0; j < 600; j++)
@@ -236,6 +292,15 @@ void BindFB(int width, int height, unsigned int *fb) {
 		framebufferPtr[j] = (unsigned int *)(framebuf + width * 4 * j);//framebuffer的每一行指向fb的每一行对应的地址
  		zbufferPtr[j] = (float*)(zbuf + width * 4 * j);
 	}
+
+	//贴图部分
+	for (j = 0; j < 256; j++) {
+		for (i = 0; i < 256; i++) {
+			int x = i / 32, y = j / 32;
+			texbuffer[j][i] = ((x + y) & 1) ? 0xffffff : 0x3fbcef;
+		}
+	}
+
 /*	device->texture[0] = (IUINT32*)ptr;
 	device->texture[1] = (IUINT32*)(ptr + 16);
 	memset(device->texture[0], 0, 64);
@@ -295,7 +360,7 @@ int  main()
 // 		screen_update();
 // 		getchar();
 // 		return 0;
-	SetTimer(NULL,1, 1000/30, timerProc);
+// 	SetTimer(NULL,1, 1000/30, timerProc);
 	clock_t start, finish;
 	float  fps;
 	/* 测量一个事件持续的时间*/
@@ -305,7 +370,14 @@ int  main()
 		{
 			cam_angle += 0.01f;
 			RotateCube(cam_angle);
-	//		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
+			//		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
+			ClearFrameBuffer();
+		}
+		if (screen_keys[VK_RIGHT])
+		{
+			cam_angle -= 0.01f;
+			RotateCube(cam_angle);
+//		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
 			ClearFrameBuffer();
 		}
 
