@@ -80,6 +80,7 @@ void ApplyClipping()//裁剪变换
 void ApplyHomogenize()//归一化到NDC
 {
 	float rhw = 0;
+#pragma omp parallel for
 	for (size_t i = 0; i < 8; i++)
 	{
 		rhw = 1.0f / cube_camera_w[i];
@@ -95,6 +96,7 @@ void ApplyHomogenize()//归一化到NDC
 
 void ApplyWVPTransform()//世界变换
 {
+#pragma omp parallel for
 	for (size_t i = 0; i < 8; i++)
 	{
 		matrix_apply(&cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform);//到CVV空间
@@ -105,16 +107,6 @@ void ApplyWVPTransform()//世界变换
 unsigned int GetTexture(float u, float v)
 {
 	return texbuffer[(int)u][(int)v];
-}
-
-void vertex_rhw_init(Vertex *v) {
-	float rhw = 1.0f / v->pos.w;
-	v->rhw = rhw;
-	v->texcoord.u *= rhw;
-	v->texcoord.v *= rhw;
-// 	v->color.r *= rhw;
-// 	v->color.g *= rhw;
-// 	v->color.b *= rhw;
 }
 
 void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
@@ -141,9 +133,9 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
 	//纹理
 	float u, v;
 // 	float u1, v1, u2, v2, u3, v3;
-
 	for (int x = 0; x < 550; x++)
 	{
+#pragma omp parallel for
 		for (int y = 0; y <600; y++)
 		{
 			c = ((y1 - y2)*x + (x2 - x1)*y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
@@ -181,7 +173,6 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
 //	double z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x);
 	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x) > 0.0f)
 	{
-
 		//开始光栅化
 		Barycentric(p1, p2, p3, color);
 	}
@@ -190,16 +181,17 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
 void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的索引
 {
 	Vertex* p1 = &cube_processed[a], *p2 = &cube_processed[b], *p3 = &cube_processed[c], *p4 =& cube_processed[d];
-	Vertex tp1, tp2, tp3,tp4;
-	tp1.pos = p1->pos; tp2.pos = p2->pos; tp3.pos = p3->pos; tp4.pos = p4->pos;
-	tp1.rhw = p1->rhw; tp2.rhw = p2->rhw; tp3.rhw = p3->rhw; tp4.rhw = p4->rhw;
-	tp1.pos.w = cube_camera_w[a]; tp2.pos.w = cube_camera_w[b]; tp3.pos.w = cube_camera_w[c]; tp4.pos.w = cube_camera_w[d];
+	p1->pos.w = cube_camera_w[a]; p2->pos.w = cube_camera_w[b]; p3->pos.w = cube_camera_w[c]; p4->pos.w = cube_camera_w[d];
+// 	Vertex tp1, tp2, tp3,tp4;
+// 	tp1.pos = p1->pos; tp2.pos = p2->pos; tp3.pos = p3->pos; tp4.pos = p4->pos;
+// 	tp1.rhw = p1->rhw; tp2.rhw = p2->rhw; tp3.rhw = p3->rhw; tp4.rhw = p4->rhw;
+// 	tp1.pos.w = tp2.pos.w = cube_camera_w[b]; tp3.pos.w = cube_camera_w[c]; tp4.pos.w = cube_camera_w[d];
 	p1->texcoord.u = 0, p1->texcoord.v = 0, p2->texcoord.u = 0, p2->texcoord.v = 1;
 	p3->texcoord.u = 1, p3->texcoord.v = 1, p4->texcoord.u = 1, p4->texcoord.v = 0;
-	tp1.texcoord = p1->texcoord; tp2.texcoord = p2->texcoord; tp3.texcoord = p3->texcoord; tp4.texcoord = p4->texcoord;
+// 	tp1.texcoord = p1->texcoord; tp2.texcoord = p2->texcoord; tp3.texcoord = p3->texcoord; tp4.texcoord = p4->texcoord;
 
-	DrawPrimitive(&tp3, &tp2, &tp1, color);//分成三角形图元绘制
-	DrawPrimitive(&tp1, &tp4, &tp3, color);
+	DrawPrimitive(p3, p2, p1, color);//分成三角形图元绘制
+	DrawPrimitive(p1, p4, p3, color);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
@@ -233,9 +225,6 @@ void DrawCube(float self_angle, float cam_angle)
 	DrawPlane(1, 5, 6, 2, 200);
 	DrawPlane(3, 2, 6, 7, -550);
 	DrawPlane(3, 7, 4, 0, 0);
-
-// 	DrawPlane(2, 1, 0, 3, 100);
-
 
 // 	DrawPlane( 0, 1, 2, 3, 0);
 // 	DrawPlane( 4, 5, 6, 7, 0);
@@ -340,6 +329,7 @@ void CALLBACK timerProc(HWND a, UINT b, UINT c, DWORD d)
 	ClearFrameBuffer();
 	RotateCube(self_angle);
 }
+
 int  main()
 {
 // 	for (size_t i = 0; i < 800; i++)
@@ -371,7 +361,7 @@ int  main()
 // 		getchar();
 // 		return 0;
 
-	SetTimer(NULL,1, 1000/15, timerProc);
+	SetTimer(NULL,1, 1000/30, timerProc);
 	clock_t start, finish;
 	float  fps;
 	/* 测量一个事件持续的时间*/
@@ -394,16 +384,16 @@ int  main()
 
 	DrawCube(self_angle,cam_angle);
 //	for (size_t i = 0; i < 8; i++)
-		//printf("x: %f y: %f z: %f w: %f\n",cube_processed[i].pos.x, cube_processed[i].pos.y, cube_processed[i].pos.z, cube_processed[i].pos.w);
+// 		printf("x: %f y: %f z: %f w: %f\n",cube_processed[i].pos.x, cube_processed[i].pos.y, cube_processed[i].pos.z, cube_processed[i].pos.w);
 	finish = clock();
 	fps = 1.0f/((float)(finish - start) / CLOCKS_PER_SEC);
-	if (fps<60.0f)
+// 	if (fps<60.0f)
 	{
 		printf("FPS: %f\n", fps);
 	}
 
 		screen_update();
-//		Sleep(1);
+// 		Sleep(100);
 	}
 	// 	continue;
 
