@@ -61,6 +61,7 @@ float **zbufferPtr;//深度缓冲
 float *zbuffer;
 float zbufferMaxDepth[800][600];//用来memcpy重置zbuffer的
 unsigned int texbuffer[256][256];
+float cube_camera_w[8];// 归一化前相机空间内顶点的w，暂存
 
 typedef struct {
 	matrix_t world;         // 世界坐标变换
@@ -81,12 +82,13 @@ void ApplyHomogenize()//归一化到NDC
 	float rhw = 0;
 	for (size_t i = 0; i < 8; i++)
 	{
-		rhw = 1.0f / cube_processed[i].pos.w;
-//		matrix_apply(&cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform);//到相机空间
-		cube_processed[i].pos.x = (cube_processed[i].pos.x * rhw + 1.0f) * 800.0f * 0.5f;
-		cube_processed[i].pos.y = (1.0f - cube_processed[i].pos.y * rhw) * 600.0f * 0.5f;
-		cube_processed[i].pos.z = cube_processed[i].pos.z * rhw;
-		cube_processed[i].pos.w = 1.0f;
+		rhw = 1.0f / cube_camera_w[i];
+// 		cube_processed[i].rhw = rhw;
+//		matrix_apply(& cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform);//到相机空间
+		 cube_processed[i].pos.x = ( cube_processed[i].pos.x * rhw + 1.0f) * 800.0f * 0.5f;
+		 cube_processed[i].pos.y = (1.0f -  cube_processed[i].pos.y * rhw) * 600.0f * 0.5f;
+		 cube_processed[i].pos.z =  cube_processed[i].pos.z * rhw;
+		 cube_processed[i].pos.w = 1.0f;
 	};
 
 }
@@ -95,10 +97,8 @@ void ApplyWVPTransform()//世界变换
 {
 	for (size_t i = 0; i < 8; i++)
 	{
-		matrix_apply(&cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform );//到CVV空间
+		matrix_apply(&cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform);//到CVV空间
 	};
-	//乘透视变换矩阵后到了CVV所在的空间，由于CVV是个立方体，可以很方便的裁剪。但是CVV是个立方体，所以长宽比这时候会变化，需要后续修正
-	ApplyHomogenize();//归一化到NDC
 	ApplyClipping();//裁剪
 }
 
@@ -106,6 +106,7 @@ unsigned int GetTexture(float u, float v)
 {
 	return texbuffer[(int)u][(int)v];
 }
+
 void vertex_rhw_init(Vertex *v) {
 	float rhw = 1.0f / v->pos.w;
 	v->rhw = rhw;
@@ -189,21 +190,24 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
 void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的索引
 {
 	Vertex* p1 = &cube_processed[a], *p2 = &cube_processed[b], *p3 = &cube_processed[c], *p4 =& cube_processed[d];
+	Vertex tp1, tp2, tp3,tp4;
+	tp1.pos = p1->pos; tp2.pos = p2->pos; tp3.pos = p3->pos; tp4.pos = p4->pos;
+	tp1.rhw = p1->rhw; tp2.rhw = p2->rhw; tp3.rhw = p3->rhw; tp4.rhw = p4->rhw;
+	tp1.pos.w = cube_camera_w[a]; tp2.pos.w = cube_camera_w[b]; tp3.pos.w = cube_camera_w[c]; tp4.pos.w = cube_camera_w[d];
 	p1->texcoord.u = 0, p1->texcoord.v = 0, p2->texcoord.u = 0, p2->texcoord.v = 1;
 	p3->texcoord.u = 1, p3->texcoord.v = 1, p4->texcoord.u = 1, p4->texcoord.v = 0;
-		vertex_rhw_init(p1);	// 初始化 w
-		vertex_rhw_init(p2);	// 初始化 w
-		vertex_rhw_init(p3);	// 初始化 w
-	DrawPrimitive(p3, p2, p1, color);//分成三角形图元绘制
-	DrawPrimitive(p1, p4, p3, color);
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
-	printf("\n");
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[d].pos.x, cube_processed[d].pos.y, cube_processed[d].pos.z, cube_processed[d].pos.w);
-	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
-	printf("\n");
+	tp1.texcoord = p1->texcoord; tp2.texcoord = p2->texcoord; tp3.texcoord = p3->texcoord; tp4.texcoord = p4->texcoord;
+
+	DrawPrimitive(&tp3, &tp2, &tp1, color);//分成三角形图元绘制
+	DrawPrimitive(&tp1, &tp4, &tp3, color);
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
+// 	printf("\n");
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[d].pos.x, cube_processed[d].pos.y, cube_processed[d].pos.z, cube_processed[d].pos.w);
+// 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
+// 	printf("\n");
 }
 
 void UpdateMVPMatrix()
@@ -216,6 +220,12 @@ void UpdateMVPMatrix()
 void DrawCube(float self_angle, float cam_angle)
 {
 	ApplyWVPTransform();//顶点坐标从局部坐标系转到裁剪后的NDC
+	for (size_t i = 0; i < 8; i++)
+	{
+		cube_camera_w[i] = cube_processed[i].pos.w;
+	};
+	//乘透视变换矩阵后到了CVV所在的空间，由于CVV是个立方体，可以很方便的裁剪。但是CVV是个立方体，所以长宽比这时候会变化，需要后续修正
+	ApplyHomogenize();//归一化到NDC
 	//开始光栅化
 	DrawPlane(2, 3, 0, 1, 100);//原来的
 	DrawPlane(7, 6, 5, 4, -250);
@@ -239,7 +249,7 @@ void DrawCube(float self_angle, float cam_angle)
 void RotateCube(float angle)
 {
 	matrix_t m;
-	matrix_set_rotate(&m, -0, -0,1, angle);//算旋转矩阵
+	matrix_set_rotate(&m, -1, -0.5,1, angle);//算旋转矩阵
 	transformMatrix.world = m;
 	UpdateMVPMatrix();//更新矩阵
 }
@@ -360,7 +370,8 @@ int  main()
 // 		screen_update();
 // 		getchar();
 // 		return 0;
-// 	SetTimer(NULL,1, 1000/30, timerProc);
+
+	SetTimer(NULL,1, 1000/15, timerProc);
 	clock_t start, finish;
 	float  fps;
 	/* 测量一个事件持续的时间*/
@@ -386,7 +397,10 @@ int  main()
 		//printf("x: %f y: %f z: %f w: %f\n",cube_processed[i].pos.x, cube_processed[i].pos.y, cube_processed[i].pos.z, cube_processed[i].pos.w);
 	finish = clock();
 	fps = 1.0f/((float)(finish - start) / CLOCKS_PER_SEC);
-	printf("FPS: %f\n", fps);
+	if (fps<60.0f)
+	{
+		printf("FPS: %f\n", fps);
+	}
 
 		screen_update();
 //		Sleep(1);
