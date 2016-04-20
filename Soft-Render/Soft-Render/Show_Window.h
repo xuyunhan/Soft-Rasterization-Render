@@ -78,7 +78,7 @@ int screen_init(int w, int h, const TCHAR *title) {
 	screen_dispatch();
 
 	memset(screen_keys, 0, sizeof(int) * 512);
-	memset(screen_fb, 0xc0c0c0, w * h * 4);
+	memset(screen_fb, 0x000000, w * h * 4);
 
 	return 0;
 }

@@ -106,7 +106,7 @@ void ApplyWVPTransform()//世界变换
 	ApplyClipping();//裁剪
 }
 
-unsigned int GetTexture(double u, double v)
+unsigned int GetTexture(float u, float v)
 {
 // 	unsigned int nColorRef = RGB(0, 128, 255);//此时a为BGR
 // 	int red = nColorRef & 255;//这样从COLORREF中获取RGB
@@ -116,10 +116,10 @@ unsigned int GetTexture(double u, double v)
 //	v *= 256.0f;
 	int x = floor(u);
 	int y = floor(v);
-	double u_ratio = u - x;
-	double v_ratio = v - y;
-	double u_opposite = 1 - u_ratio;
-	double v_opposite = 1 - v_ratio;
+	float u_ratio = u - x;
+	float v_ratio = v - y;
+	float u_opposite = 1 - u_ratio;
+	float v_opposite = 1 - v_ratio;
 
 	unsigned int r = ((texbuffer[x][y] & 255) * u_opposite + (texbuffer[x + 1][y] & 255) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] & 255) * u_opposite + (texbuffer[x + 1][y + 1] & 255) * u_ratio) * v_ratio;
 	unsigned int g = ((texbuffer[x][y] >> 8 & 255) * u_opposite + (texbuffer[x + 1][y] >> 8 & 255) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] >> 8 & 255) * u_opposite + (texbuffer[x + 1][y + 1] >> 8 & 255) * u_ratio) * v_ratio;
@@ -131,10 +131,10 @@ unsigned int GetTexture(double u, double v)
 //	return texbuffer[(int)u][(int)v];
 }
 
-Vector dir_light = { -1,0,0,0 };//向右边照的方向光
 
 void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, Vector* normal)
 {
+Vector dir_light = { 10,1,1,1 };//向右边照的方向光
 	float x1 = p1->pos.x;
 	float y1 = p1->pos.y;
 	float z1 = p1->pos.z;
@@ -158,23 +158,33 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, Vector* normal)
 	double u, v;
 // 	float u1, v1, u2, v2, u3, v3;
 	//光照
-	Vector _2N = { normal->x * 2,normal->y * 2,normal->z * 2,0 };
-	Vector p = { p1->pos.x / 1600.0f +p3->pos.x / 1600.0f, p1->pos.y / 1200.0f+ p3->pos.y / 1200.0f, (p1->pos.z +p3->pos.z)/2.0f};
-	Vector L;  vector_sub(&L, &dir_light, &p);
-	Vector R,temp;
-	temp = vector_multply(normal, vector_dotproduct(&_2N, &L));
-	vector_sub(&R, &temp, &L);
-	Vector V = { 0 - p.x,0 - p.y,0 - p.z,0 - p.w };
-	float VdotR = vector_dotproduct(&V, &R);
-	float VdotR_n = VdotR;
-	int n = 1;//次数
-	VdotR_n = pow(VdotR, n);
-//	for (size_t i = 0; i < n; i++)
-	{
-//		VdotR_n *= VdotR;
-	}
-	float Ks = 1; float Is = 1;
-	float Ispecular = Ks*Is*VdotR_n;
+// 	Vector _2N = { normal->x * 2,normal->y * 2,normal->z * 2,0 };
+
+	Vector p = { p1->pos.x / 1600.0f +p3->pos.x / 1600.0f, p1->pos.y / 1200.0f+ p3->pos.y / 1200.0f, (p1->pos.z +p3->pos.z)/2.0f ,0};
+	Vector temp;
+	vector_normalize(&dir_light);
+
+	matrix_apply(&temp, &dir_light, &transformMatrix.view);
+	matrix_apply(&temp, &temp, &transformMatrix.projection);
+
+	vector_normalize(&temp);
+	Vector L;  vector_sub(&L, &temp, &p);
+	vector_normalize(&L);
+// 	Vector R,temp;
+// 	temp = vector_multply(normal, vector_dotproduct(&_2N, &L));
+// 	vector_sub(&R, &temp, &L);
+	float diffuse = max(vector_dotproduct(&L, normal), 0)*2;
+	diffuse = min(diffuse, 1);
+//	printf("%f\n", diffuse);
+// 	Vector V = { 0 - p.x,0 - p.y,0 - p.z,0 - p.w };
+// 	float VdotR = vector_dotproduct(&V, &R);
+// 	float VdotR_n = VdotR;
+// 	int n = 1;//次数
+// 	VdotR_n = pow(VdotR, n);
+// 
+// 	float Ks = 1; float Is = 1;
+// 	float Ispecular = Ks*Is*VdotR_n;
+	//光照完
 	//获得本三角形所在的矩形
 	float xmin, xmax, ymin, ymax;
 	xmin = x1 < x2 ? x1 : x2;
@@ -186,11 +196,12 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, Vector* normal)
 	ymax = y1 > y2 ? y1 : y2;
 	ymax = ymax > y3 ? ymax : y3;
 // #pragma omp parallel for
-#pragma omp parallel
+	int red = 0, green = 0, blue = 0;
+//#pragma omp parallel
 {
-#pragma omp parallel for nowait
 	for (int x = xmin; x < xmax; x++)
 	{
+// #pragma omp parallel for nowait
 		for (int y = ymin; y < ymax; y++)
 		{
 			c = ((y1 - y2)*x + (x2 - x1)*y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
@@ -206,27 +217,13 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, Vector* normal)
 					v = ((a*(p1->texcoord.v / p1->pos.w) + b*(p2->texcoord.v / p2->pos.w) + c*(p3->texcoord.v / p3->pos.w)) / zr) * 255.0;//h
 					zbuffer[(int)x * 800 + (int)y] = z;
 
-// 					unsigned int color16 = 0xff2233;// GetTexture(u, v);
-// 					byte r = 255, g = 0, b = 0;
-// 					memcpy(&r, (char*)&color16 + 2, 1);
-// 					memcpy(&g, (char*)&color16 + 1, 1);
-// 					memcpy(&b, (char*)&color16, 1);
-// //					r = r >> 1; g >> 2, b >> 2;
-// 					int r10 = 0;// = r & 0x000001; r10 + ((r & 0x000010) >> 1) * 10;
-// 					if (r & 0x000001)
-// 					{
-// 						r10 = 1;
-// 					}
-// 					if (r & 0x000010)
-// 					{
-// 						r10 += 10;
-// 					}
-// 					memcpy((char*)&color16 + 2,&r,  1);
-// 					memcpy((char*)&color16 + 1, &g, 1);
-// 					memcpy((char*)&color16,&b,  1);
-// 					char a = r*2;
-// 					framebufferPtr[x][y] = color16;
-					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
+					int ColorRef = GetTexture(u, v);
+					red = ColorRef & 255;//这样从COLORREF中获取RGB
+					green = ColorRef >> 8 & 255;
+					blue = ColorRef >> 16 & 255;
+					(float)red *= diffuse; (float)green *= diffuse; (float)blue *= diffuse;
+					framebufferPtr[x][y] = RGB(red, green, blue);
+// 					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
 				}
 			}
 		}
@@ -407,7 +404,7 @@ void BindFB(int width, int height, void *fb) {
 
 void ClearFrameBuffer()
 {
-	memset(screen_fb, 0xc0c0c0, 800 * 600 * 4);
+	memset(screen_fb, 0x000000, 800 * 600 * 4);
 	memcpy(zbuffer, zbufferMaxDepth, 800 * 600 * sizeof(float));
 }
 
@@ -465,7 +462,6 @@ int  main()
 			self_angle += 0.01f;
 			RotateCube(self_angle);
 //		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
-			ClearFrameBuffer();
 		}
 // 		if (screen_keys[VK_RIGHT])
 // 		{
@@ -486,6 +482,7 @@ int  main()
 //	}
 
 		screen_update();
+		ClearFrameBuffer();
 //  	getchar();
 // 		Sleep(100);
 	}
