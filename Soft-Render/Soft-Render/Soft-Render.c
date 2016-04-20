@@ -28,6 +28,8 @@ typedef struct
 	float rhw;
 }Vertex;
 
+typedef Pos Vector;//Pos当Vector用
+
 Vertex cube[8] = 
 {
 	{ { 1, -1,  1, 1 },{ 1.0f, 0.2f, 0.2f } ,{0.0f,0.0f}},
@@ -104,12 +106,34 @@ void ApplyWVPTransform()//世界变换
 	ApplyClipping();//裁剪
 }
 
-unsigned int GetTexture(float u, float v)
+unsigned int GetTexture(double u, double v)
 {
-	return texbuffer[(int)u][(int)v];
+// 	unsigned int nColorRef = RGB(0, 128, 255);//此时a为BGR
+// 	int red = nColorRef & 255;//这样从COLORREF中获取RGB
+// 	int green = nColorRef >> 8 & 255;
+// 	int blue = nColorRef >> 16 & 255;
+//	u *= 256.0f;
+//	v *= 256.0f;
+	int x = floor(u);
+	int y = floor(v);
+	double u_ratio = u - x;
+	double v_ratio = v - y;
+	double u_opposite = 1 - u_ratio;
+	double v_opposite = 1 - v_ratio;
+
+	unsigned int r = ((texbuffer[x][y] & 255) * u_opposite + (texbuffer[x + 1][y] & 255) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] & 255) * u_opposite + (texbuffer[x + 1][y + 1] & 255) * u_ratio) * v_ratio;
+	unsigned int g = ((texbuffer[x][y] >> 8 & 255) * u_opposite + (texbuffer[x + 1][y] >> 8 & 255) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] >> 8 & 255) * u_opposite + (texbuffer[x + 1][y + 1] >> 8 & 255) * u_ratio) * v_ratio;
+	unsigned int b = ((texbuffer[x][y] >> 16 & 255) * u_opposite + (texbuffer[x + 1][y] >> 16 & 255) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] >> 16 & 255) * u_opposite + (texbuffer[x + 1][y + 1] >> 16 & 255) * u_ratio) * v_ratio;
+//	return result;
+//	return a;
+	return RGB(r, g, b);
+
+//	return texbuffer[(int)u][(int)v];
 }
 
-void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
+Vector dir_light = { -1,0,0,0 };//向右边照的方向光
+
+void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, Vector* normal)
 {
 	float x1 = p1->pos.x;
 	float y1 = p1->pos.y;
@@ -131,9 +155,26 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
 	float deltaZperY = -B / C;
 	float z = 0;
 	//纹理
-	float u, v;
+	double u, v;
 // 	float u1, v1, u2, v2, u3, v3;
-
+	//光照
+	Vector _2N = { normal->x * 2,normal->y * 2,normal->z * 2,0 };
+	Vector p = { p1->pos.x / 1600.0f +p3->pos.x / 1600.0f, p1->pos.y / 1200.0f+ p3->pos.y / 1200.0f, (p1->pos.z +p3->pos.z)/2.0f};
+	Vector L;  vector_sub(&L, &dir_light, &p);
+	Vector R,temp;
+	temp = vector_multply(normal, vector_dotproduct(&_2N, &L));
+	vector_sub(&R, &temp, &L);
+	Vector V = { 0 - p.x,0 - p.y,0 - p.z,0 - p.w };
+	float VdotR = vector_dotproduct(&V, &R);
+	float VdotR_n = VdotR;
+	int n = 1;//次数
+	VdotR_n = pow(VdotR, n);
+//	for (size_t i = 0; i < n; i++)
+	{
+//		VdotR_n *= VdotR;
+	}
+	float Ks = 1; float Is = 1;
+	float Ispecular = Ks*Is*VdotR_n;
 	//获得本三角形所在的矩形
 	float xmin, xmax, ymin, ymax;
 	xmin = x1 < x2 ? x1 : x2;
@@ -145,36 +186,57 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
 	ymax = y1 > y2 ? y1 : y2;
 	ymax = ymax > y3 ? ymax : y3;
 // #pragma omp parallel for
+#pragma omp parallel
+{
+#pragma omp parallel for nowait
 	for (int x = xmin; x < xmax; x++)
 	{
-#pragma omp parallel for
-		for (int y = ymin; y <ymax; y++)
+		for (int y = ymin; y < ymax; y++)
 		{
 			c = ((y1 - y2)*x + (x2 - x1)*y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
 			b = ((y1 - y3)*x + (x3 - x1)*y + x1*y3 - x3*y1) / ((y1 - y3)*x2 + (x3 - x1)*y2 + x1*y3 - x3*y1);
 			a = 1 - b - c;
 			if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
 			{
-//				Color c = a*c1 + b*c2 + c*c3;
-//				DrawPixel(x, y, c);
-//				printf("点：x: %d y: %d\n", x, y);
 				z = z1 + (x - x1) *deltaZperX + (y - y1)*deltaZperY;//算该三角形的Z值
 				if (z < (zbuffer[(int)x * 800 + (int)y]))//若离屏幕更近则显示否则舍弃
 				{
 					double zr = a*(1 / p1->pos.w) + b*(1 / p2->pos.w) + c*(1 / p3->pos.w);
-					u = ((a*(p1->texcoord.u / p1->pos.w) + b*(p3->texcoord.u / p2->pos.w) + c*(p3->texcoord.u / p3->pos.w)) / zr) * 255.0f;//w
-					v = ((a*(p1->texcoord.v / p1->pos.w) + b*(p2->texcoord.v / p2->pos.w) + c*(p3->texcoord.v / p3->pos.w)) / zr) * 255.0f;//h
-					zbuffer[(int)x*800+(int)y] = z;
-				//	framebufferPtr[x][y] = color;// SetPixel(GetCDC(), x, y, RGB(255, 255, 255));
-					framebufferPtr[x][y] = GetTexture(u, v);
+					u = ((a*(p1->texcoord.u / p1->pos.w) + b*(p3->texcoord.u / p2->pos.w) + c*(p3->texcoord.u / p3->pos.w)) / zr) * 255.0;//w
+					v = ((a*(p1->texcoord.v / p1->pos.w) + b*(p2->texcoord.v / p2->pos.w) + c*(p3->texcoord.v / p3->pos.w)) / zr) * 255.0;//h
+					zbuffer[(int)x * 800 + (int)y] = z;
+
+// 					unsigned int color16 = 0xff2233;// GetTexture(u, v);
+// 					byte r = 255, g = 0, b = 0;
+// 					memcpy(&r, (char*)&color16 + 2, 1);
+// 					memcpy(&g, (char*)&color16 + 1, 1);
+// 					memcpy(&b, (char*)&color16, 1);
+// //					r = r >> 1; g >> 2, b >> 2;
+// 					int r10 = 0;// = r & 0x000001; r10 + ((r & 0x000010) >> 1) * 10;
+// 					if (r & 0x000001)
+// 					{
+// 						r10 = 1;
+// 					}
+// 					if (r & 0x000010)
+// 					{
+// 						r10 += 10;
+// 					}
+// 					memcpy((char*)&color16 + 2,&r,  1);
+// 					memcpy((char*)&color16 + 1, &g, 1);
+// 					memcpy((char*)&color16,&b,  1);
+// 					char a = r*2;
+// 					framebufferPtr[x][y] = color16;
+					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
 				}
 			}
 		}
 	}
+}
 
 // 	getchar();
 }
-void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
+
+void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3)//绘制图元
 {
 // 	ApplyWorldTransform();//顶点坐标从局部坐标系转到世界坐标系
 // 	ApplyViewTransform();//到相机坐标系
@@ -183,10 +245,21 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3,int color)//绘制图元
 
 	//背面剔除
 //	double z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x);
-	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x) > 0.0f)
+// 	已知三点求三角形法向量(a,b,c)
+// 		a = ((p2.y - p1.y)*(p3.z - p1.z) - (p2.z - p1.z)*(p3.y - p1.y));
+// 
+// 		b = ((p2.z - p1.z)*(p3.x - p1.x) - (p2.x - p1.x)*(p3.z - p1.z));
+// 
+// 		c = ((p2.x - p1.x)*(p3.y - p1.y) - (p2.y - p1.y)*(p3.x - p1.x));	
+	Vector normal = { 0,0,0,0 };
+	normal.x = (p2->pos.y - p1->pos.y) * (p3->pos.z - p1->pos.z) - (p3->pos.y - p1->pos.y) * (p2->pos.z - p1->pos.z);
+	normal.y = (p2->pos.z - p1->pos.z) * (p3->pos.x - p1->pos.x) - (p3->pos.z - p1->pos.z) * (p2->pos.x - p1->pos.x);
+	normal.z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y);
+	vector_normalize(&normal);//光照模型里法线要规范化
+	if (normal.z > 0.0f)
 	{
 		//开始光栅化
-		Barycentric(p1, p2, p3, color);
+		Barycentric(p1, p2, p3, &normal);
 	}
 }
 
@@ -202,8 +275,8 @@ void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的
 	p3->texcoord.u = 1, p3->texcoord.v = 1, p4->texcoord.u = 1, p4->texcoord.v = 0;
 // 	tp1.texcoord = p1->texcoord; tp2.texcoord = p2->texcoord; tp3.texcoord = p3->texcoord; tp4.texcoord = p4->texcoord;
 
-	DrawPrimitive(p3, p2, p1, color);//分成三角形图元绘制
-	DrawPrimitive(p1, p4, p3, color);
+	DrawPrimitive(p3, p2, p1);//分成三角形图元绘制
+	DrawPrimitive(p1, p4, p3);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[a].pos.x, cube_processed[a].pos.y, cube_processed[a].pos.z, cube_processed[a].pos.w);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[b].pos.x, cube_processed[b].pos.y, cube_processed[b].pos.z, cube_processed[b].pos.w);
 // 	printf("三角形屏幕坐标：x: %f y: %f z: %f w: %f\n", cube_processed[c].pos.x, cube_processed[c].pos.y, cube_processed[c].pos.z, cube_processed[c].pos.w);
@@ -232,6 +305,7 @@ void DrawCube(float self_angle)
 	//乘透视变换矩阵后到了CVV所在的空间，由于CVV是个立方体，可以很方便的裁剪。但是CVV是个立方体，所以长宽比这时候会变化，需要后续修正
 	ApplyHomogenize();//归一化到NDC
 	//开始光栅化
+
 	DrawPlane(2, 3, 0, 1, 100);//原来的
 	DrawPlane(7, 6, 5, 4, -250);
 	DrawPlane(0, 4, 5, 1, -50);
@@ -280,10 +354,6 @@ void BindFB(int width, int height, void *fb) {
 // 	assert(ptr);
 // 	framebufferPtr = (unsigned int **)ptr;//原来的
 	framebufferPtr = (unsigned int **)malloc(sizeof(unsigned int*) * height);
-	for (j = 0; j < height; j++)
-	{
-//		framebuffer[j] = (unsigned int *)malloc(sizeof(void*));//framebuffer的每一行指向fb的每一行对应的地址
-	}
 
 // 	zbuffer = (float**)(ptr + sizeof(void*) * height);
 	zbufferPtr = (float**)malloc(sizeof(float*) * height);
@@ -316,7 +386,7 @@ void BindFB(int width, int height, void *fb) {
 	for (j = 0; j < 256; j++) {
 		for (i = 0; i < 256; i++) {
 			int x = i / 32, y = j / 32;
-			texbuffer[j][i] = ((x + y) & 1) ? 0xffffff : 0x3fbcef;
+			texbuffer[j][i] = ((x + y) & 1) ? 0xffffff : RGB(255,0,0);
 		}
 	}
 
@@ -392,7 +462,7 @@ int  main()
 // 		start = clock();
 // 		if (screen_keys[VK_LEFT])
 		{
-			self_angle += 0.1f;
+			self_angle += 0.01f;
 			RotateCube(self_angle);
 //		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
 			ClearFrameBuffer();
@@ -416,7 +486,7 @@ int  main()
 //	}
 
 		screen_update();
-// 		getchar();
+//  	getchar();
 // 		Sleep(100);
 	}
 	// 	continue;

@@ -33,6 +33,16 @@ void vector_sub(Pos *z, const Pos *x, const Pos *y) {
 	z->z = x->z - y->z;
 	z->w = 1.0;
 }
+// ·µ»Ø x * y
+Pos vector_multply(const Pos *x, const float y) {
+	Pos z;
+	z.x = x->x*y;
+	z.y = x->y*y;
+	z.z = x->z*y;
+	z.w = x->w*y;
+	return z;
+}
+
 
 // Ê¸Á¿µã³Ë
 float vector_dotproduct(const Pos *x, const Pos *y) {
