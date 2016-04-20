@@ -133,10 +133,22 @@ void Barycentric(Vertex* p1, Vertex* p2, Vertex* p3, int color)
 	//纹理
 	float u, v;
 // 	float u1, v1, u2, v2, u3, v3;
-	for (int x = 0; x < 550; x++)
+
+	//获得本三角形所在的矩形
+	float xmin, xmax, ymin, ymax;
+	xmin = x1 < x2 ? x1 : x2;
+	xmin = xmin < x3 ? xmin : x3;
+	xmax = x1 > x2 ? x1 : x2;
+	xmax = xmax > x3 ? xmax : x3;
+	ymin = y1 < y2 ? y1 : y2;
+	ymin = ymin < y3 ? ymin : y3;
+	ymax = y1 > y2 ? y1 : y2;
+	ymax = ymax > y3 ? ymax : y3;
+// #pragma omp parallel for
+	for (int x = xmin; x < xmax; x++)
 	{
 #pragma omp parallel for
-		for (int y = 0; y <600; y++)
+		for (int y = ymin; y <ymax; y++)
 		{
 			c = ((y1 - y2)*x + (x2 - x1)*y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
 			b = ((y1 - y3)*x + (x3 - x1)*y + x1*y3 - x3*y1) / ((y1 - y3)*x2 + (x3 - x1)*y2 + x1*y3 - x3*y1);
@@ -209,7 +221,8 @@ void UpdateMVPMatrix()
 	matrix_mul(&transformMatrix.transform, &m, &transformMatrix.projection);// transform = world * view * projection
 }
 
-void DrawCube(float self_angle, float cam_angle)
+int FPS = 0;
+void DrawCube(float self_angle)
 {
 	ApplyWVPTransform();//顶点坐标从局部坐标系转到裁剪后的NDC
 	for (size_t i = 0; i < 8; i++)
@@ -225,6 +238,7 @@ void DrawCube(float self_angle, float cam_angle)
 	DrawPlane(1, 5, 6, 2, 200);
 	DrawPlane(3, 2, 6, 7, -550);
 	DrawPlane(3, 7, 4, 0, 0);
+	FPS++;
 
 // 	DrawPlane( 0, 1, 2, 3, 0);
 // 	DrawPlane( 4, 5, 6, 7, 0);
@@ -244,17 +258,16 @@ void RotateCube(float angle)
 }
 
 void SetCameraLookAt(TransformMatrix *transformMatrix, float x, float y, float z) {
-	point_t eye = { x, y, z, 1 }, at = { 0, 0, 0, 1 }, up = { 0, 0, 1, 1 };
+	point_t eye = { x, y, z, 1 }, at = { 0, -0.5, 0.5, 1 }, up = { 0, 0, 1, 1 };
 	matrix_set_identity(&transformMatrix->world);
 	matrix_set_identity(&transformMatrix->view);
 	matrix_set_perspective(&transformMatrix->projection, 3.1415926f * 0.5f, 800.0f/600.0f, 1.0f, 500.0f);
 	matrix_set_lookat(&transformMatrix->view, &eye, &at, &up);
 	UpdateMVPMatrix();
 }
-
-void BindFB(int width, int height, unsigned int *fb) {
-	int need = sizeof(void*) * (height * 2 + 1024) + width * height * 8;
-	char *ptr = (char*)malloc(need + 64);
+void BindFB(int width, int height, void *fb) {
+// 	int need = sizeof(void*) * (height * 2 + 1024) + width * height * 8;
+// 	char *ptr = (char*)malloc(need + 64);
 	char *framebuf, *zbuf;
 	int i,j;
 	for (size_t i = 0; i < 800; i++)
@@ -265,8 +278,8 @@ void BindFB(int width, int height, unsigned int *fb) {
 		}
 	}
 // 	assert(ptr);
-	framebufferPtr = (unsigned int **)ptr;//原来的
-//	framebuffer = (unsigned int **)malloc(sizeof(unsigned int*) * height);
+// 	framebufferPtr = (unsigned int **)ptr;//原来的
+	framebufferPtr = (unsigned int **)malloc(sizeof(unsigned int*) * height);
 	for (j = 0; j < height; j++)
 	{
 //		framebuffer[j] = (unsigned int *)malloc(sizeof(void*));//framebuffer的每一行指向fb的每一行对应的地址
@@ -277,18 +290,25 @@ void BindFB(int width, int height, unsigned int *fb) {
 	zbuffer = (float*)malloc(800 * 600 * sizeof(float));
 //	memset(zbuffer, 1, 800 * 600 * sizeof(float));
 	memcpy(zbuffer, zbufferMaxDepth, 800 * 600 * sizeof(float));
-//	ptr += sizeof(void*) * height * 2;
+// 	ptr += sizeof(void*) * height * 2;
 // 	device->texture = (IUINT32**)ptr;
-//	ptr += sizeof(void*) * 1024;
-//	framebuf = (char*)ptr;
+// 	ptr += sizeof(void*) * 1024;
+// 	framebuf = (char*)ptr;
  //	zbuf = (char*)ptr + width * height * 4;
 	zbuf = (char*)zbufferPtr;
 // 	ptr += width * height * 8;
+	//xuyunhan
+//  	screen_fb = (char*)malloc(800 * 600 * 4);
+// 	BITMAPINFO bi = { { sizeof(BITMAPINFOHEADER), 800, -600, 1, 32, BI_RGB,	800 * 600 * 4, 0, 0, 0, 0 } };
+// 	screen_hb = CreateDIBSection(screen_dc, &bi, DIB_RGB_COLORS, &screen_fb, 0, 0);
+
+// 	memset(screen_fb, 1, 800 * 600 * 4);
+
 // 	if (fb != NULL)
-		framebuf = (unsigned int*)fb;//framebuf指向fb的首地址
+		framebuf = (char*)fb;//framebuf指向fb的首地址
 	for (j = 0; j < height; j++)
 	{
-		framebufferPtr[j] = (unsigned int *)(framebuf + width * 4 * j);//framebuffer的每一行指向fb的每一行对应的地址
+		framebufferPtr[j] = (unsigned char *)(framebuf + width * 4 * j);//framebuffer的每一行指向fb的每一行对应的地址
  		zbufferPtr[j] = (float*)(zbuf + width * 4 * j);
 	}
 
@@ -325,9 +345,11 @@ float cam_angle = 0, self_angle = 0;
 
 void CALLBACK timerProc(HWND a, UINT b, UINT c, DWORD d)
 {
-	self_angle += 0.1f;
-	ClearFrameBuffer();
-	RotateCube(self_angle);
+	printf("FPS: %d\n", FPS);
+	FPS = 0;
+// 	self_angle += 0.1f;
+// 	ClearFrameBuffer();
+// 	RotateCube(self_angle);
 }
 
 int  main()
@@ -344,7 +366,8 @@ int  main()
 // 	}
 	screen_init(800, 600, _T("Cube"));
 	BindFB(800, 600, screen_fb);
-	SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
+	static float x = 3.2, y = 0, z = 0;
+	SetCameraLookAt(&transformMatrix, 3, 0, -0);
 // 	screen_fb = frame_buffer;
 // 		for (size_t i = 300; i < 600; i++)
 // 		{
@@ -361,38 +384,39 @@ int  main()
 // 		getchar();
 // 		return 0;
 
-	SetTimer(NULL,1, 1000/30, timerProc);
-	clock_t start, finish;
-	float  fps;
+	SetTimer(NULL,1, 1000/1, timerProc);
+//	clock_t start, finish;
+//	float  fps;
 	/* 测量一个事件持续的时间*/
-	while (screen_exit == 0 && screen_keys[VK_ESCAPE] == 0) {
-		start = clock();
-		if (screen_keys[VK_LEFT])
+	while (1/*screen_exit == 0 && screen_keys[VK_ESCAPE] == 0*/) {
+// 		start = clock();
+// 		if (screen_keys[VK_LEFT])
 		{
-			cam_angle += 0.01f;
-			RotateCube(cam_angle);
-			//		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
-			ClearFrameBuffer();
-		}
-		if (screen_keys[VK_RIGHT])
-		{
-			cam_angle -= 0.01f;
-			RotateCube(cam_angle);
+			self_angle += 0.1f;
+			RotateCube(self_angle);
 //		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
 			ClearFrameBuffer();
 		}
+// 		if (screen_keys[VK_RIGHT])
+// 		{
+// 			self_angle -= 0.1f;
+// 			RotateCube(self_angle);
+// //		SetCameraLookAt(&transformMatrix, 3.5, 0, cam_angle);
+// 			ClearFrameBuffer();
+// 		}
 
-	DrawCube(self_angle,cam_angle);
+		DrawCube(self_angle);
 //	for (size_t i = 0; i < 8; i++)
 // 		printf("x: %f y: %f z: %f w: %f\n",cube_processed[i].pos.x, cube_processed[i].pos.y, cube_processed[i].pos.z, cube_processed[i].pos.w);
-	finish = clock();
-	fps = 1.0f/((float)(finish - start) / CLOCKS_PER_SEC);
-// 	if (fps<60.0f)
-	{
-		printf("FPS: %f\n", fps);
-	}
+//	finish = clock();
+//	fps = 1.0f/((float)(finish - start) / CLOCKS_PER_SEC);
+// 	if (fps>110.0f)
+//	{
+// 		printf("FPS: %d\n", FPS);
+//	}
 
 		screen_update();
+// 		getchar();
 // 		Sleep(100);
 	}
 	// 	continue;

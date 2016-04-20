@@ -55,11 +55,12 @@ int screen_init(int w, int h, const TCHAR *title) {
 	screen_dc = CreateCompatibleDC(hDC);
 	ReleaseDC(screen_handle, hDC);
 
-	screen_hb = CreateDIBSection(screen_dc, &bi, DIB_RGB_COLORS, &ptr, 0, 0);
+	screen_fb = (unsigned char*)malloc(800 * 600 * 4);
+	screen_hb = CreateDIBSection(screen_dc, &bi, DIB_RGB_COLORS, &screen_fb, 0, 0);
 	if (screen_hb == NULL) return -3;
 
 	screen_ob = (HBITMAP)SelectObject(screen_dc, screen_hb);
-	screen_fb = (unsigned char*)ptr;
+// 	screen_fb = (unsigned char*)ptr;
 	screen_w = w;
 	screen_h = h;
 	screen_pitch = w * 4;
