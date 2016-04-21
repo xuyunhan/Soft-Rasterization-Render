@@ -60,7 +60,7 @@ int screen_init(int w, int h, const TCHAR *title) {
 	if (screen_hb == NULL) return -3;
 
 	screen_ob = (HBITMAP)SelectObject(screen_dc, screen_hb);
-// 	screen_fb = (unsigned char*)ptr;
+//	screen_fb = (unsigned char*)ptr;
 	screen_w = w;
 	screen_h = h;
 	screen_pitch = w * 4;
@@ -78,7 +78,7 @@ int screen_init(int w, int h, const TCHAR *title) {
 	screen_dispatch();
 
 	memset(screen_keys, 0, sizeof(int) * 512);
-	memset(screen_fb, 0x000000, w * h * 4);
+	memset(screen_fb, 0x000000, 800 * 600 * 4);
 
 	return 0;
 }
