@@ -208,7 +208,10 @@ Vector dir_light = { -3,3,-10,1 };//向右边照的方向光
 	const int ymm = ymax;
 	double zr = 0;
 	Color texColor;
-#pragma omp parallel for private(x,y) num_threads(4)
+	const float p1w = p1->pos.w, p2w = p2->pos.w, p3w = p3->pos.w;
+	const float p1u = p1->texcoord.u, p2u = p2->texcoord.u, p3u = p3->texcoord.u;
+	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
+//#pragma omp parallel for private(x,y) num_threads(4)
 	for (x = xmin; x < xmm; x++)
 	{
 		for (y = ymin; y < ymm; y++)
@@ -219,12 +222,12 @@ Vector dir_light = { -3,3,-10,1 };//向右边照的方向光
 			if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
 			{
 				z = z1 + (x - x1) *deltaZperX + (y - y1)*deltaZperY;//算该三角形的Z值
-				if (z < (zbuffer[(int)x * 800 + (int)y]))//若离屏幕更近则显示否则舍弃
+				if (z < (zbuffer[(int)y * 800 + (int)x]))//若离屏幕更近则显示否则舍弃
 				{
-					zr = a*(1 / p1->pos.w) + b*(1 / p2->pos.w) + c*(1 / p3->pos.w);
-					u = ((a*(p1->texcoord.u / p1->pos.w) + b*(p3->texcoord.u / p2->pos.w) + c*(p3->texcoord.u / p3->pos.w)) / zr) * 255.0;//w
-					v = ((a*(p1->texcoord.v / p1->pos.w) + b*(p2->texcoord.v / p2->pos.w) + c*(p3->texcoord.v / p3->pos.w)) / zr) * 255.0;//h
-					zbuffer[(int)x * 800 + (int)y] = z;
+					zr = a*(1 / p1w) + b*(1 / p2w) + c*(1 / p3w);
+					u = ((a*(p1u / p1w) + b*(p3u / p2w) + c*(p3u / p3w)) / zr) * 255.0;//w
+					v = ((a*(p1v / p1w) + b*(p2v / p2w) + c*(p3v / p3w)) / zr) * 255.0;//h
+					zbuffer[(int)y * 800 + (int)x] = z;
 
 					const float re255 = 1.0f / 255.0f;
 					texColor = GetTexture(u, v);
@@ -232,7 +235,7 @@ Vector dir_light = { -3,3,-10,1 };//向右边照的方向光
 					float g = (float)texColor.g*re255*diffuse;
 					float b = (float)texColor.b*re255*diffuse;
 
-					framebufferPtr[x][y] = RGB(r*255.0f, g*255.0f, b*255.0f);
+					framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
 // 					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
 				}
 			}
@@ -270,6 +273,7 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, float diffuse)//绘制图元
 
 void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的索引
 {
+
 	Vertex* p1 = &cube_processed[a], *p2 = &cube_processed[b], *p3 = &cube_processed[c], *p4 =& cube_processed[d];
 	p1->pos.w = cube_camera_w[a]; p2->pos.w = cube_camera_w[b]; p3->pos.w = cube_camera_w[c]; p4->pos.w = cube_camera_w[d];
 // 	Vertex tp1, tp2, tp3,tp4;
@@ -334,6 +338,19 @@ void UpdateMVPMatrix()
 int FPS = 0;
 void DrawCube(float self_angle)
 {
+	int x, y;
+// 	for (x = 350; x < 450; x++)
+// 	{
+// 		for (y = 250; y < 350; y++)
+// 		{
+// 			// 	for (x = xmin; x < xmm; x++)
+// 			// 	{
+// 			// 		for (y = ymin; y < ymm; y++)
+// 			// 		{
+// 			framebufferPtr[y][x] = RGB(0, 0, 0);
+// 		}
+// 	}
+// 	return;
 	ApplyWVPTransform();//顶点坐标从局部坐标系转到裁剪后的NDC
 	for (size_t i = 0; i < 8; i++)
 	{
@@ -366,16 +383,16 @@ int _switch = 1;
 void RotateCube(float angle)
 {
 	matrix_t m;
-	if(_switch == 1)matrix_set_rotate(&m, -0, -1, 0, angle);//左右转
-// 	matrix_set_rotate(&m, -1,-0 , 0, angle);//平着转
-	else matrix_set_rotate(&m,  -0, 0,-1, angle);//上下转
+// 	if(_switch == 1)matrix_set_rotate(&m, -0, -1, 0, angle);//左右转
+// // 	matrix_set_rotate(&m, -1,-0 , 0, angle);//平着转
+	 matrix_set_rotate(&m,  -0, 0,-1, angle);//上下转
 // 	matrix_set_rotate(&m, -1, -0.5, 1, angle);//算旋转矩阵
 	transformMatrix.world = m;
 	UpdateMVPMatrix();//更新矩阵
 }
 
 void SetCameraLookAt(TransformMatrix *transformMatrix, float x, float y, float z) {
-	point_t eye = { x, y, z, 1 }, at = { 0, 0, 0, 1 }, up = { 0, 0, 1, 1 };
+	point_t eye = { x, y, z, 1 }, at = { 0, -0, -0, 0 }, up = { 0, 0, 1, 1 };
 	matrix_set_identity(&transformMatrix->world);
 	matrix_set_identity(&transformMatrix->view);
 	matrix_set_perspective(&transformMatrix->projection, 3.1415926f * 0.5f, 800.0f/600.0f, 1.0f, 500.0f);
@@ -418,8 +435,7 @@ void BindFB(int width, int height, void *fb) {
 // 	memset(screen_fb, 1, 800 * 600 * 4);
 
 // 	if (fb != NULL)
-		framebuf = fb;//framebuf指向fb的首地址
-		framebufferPtr[0] = fb;
+		framebuf = screen_fb;//framebuf指向fb的首地址
 
 	for (j = 0; j < 600; j++)
 	{
@@ -476,7 +492,7 @@ int  main()
 	BindFB(800, 600, screen_fb);
 
 	static float x = 3.2, y = 0, z = 0;
-	SetCameraLookAt(&transformMatrix, 3.2, 0, 0);
+	SetCameraLookAt(&transformMatrix, 2, 0, 0);
 	SetTimer(NULL,1, 1000, timerProc);
 //	clock_t start, finish;
 //	float  fps;

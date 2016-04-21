@@ -125,6 +125,25 @@ void screen_dispatch(void) {
 
 void screen_update(void) {
 	HDC hDC = GetDC(screen_handle);
+	int i = 0, j = 0;
+// 	for ( i = 0; i < 800 * 600*4; i++)
+// 	{
+// // 		for (int j = 0; j < 600 * 4; j++)
+// 		{
+// 			screen_fb[i] = 0;
+// 		}
+// 	}
+// 
+// 	for ( i = 350*4;i<450*4;i+=4)
+// 	{
+// 		for ( j = 250; j<350;j++)
+// 		{
+// 			screen_fb[j * 800 * 4 + i] = 255;
+// 			screen_fb[j * 800 * 4 + i + 1] = 255;
+// 			screen_fb[j * 800 * 4 +i+ 2] = 255;
+// 			screen_fb[j * 800 * 4 +i+ 3] = 255;
+// 		}
+// 	}
 	BitBlt(hDC, 0, 0, screen_w, screen_h, screen_dc, 0, 0, SRCCOPY);
 	ReleaseDC(screen_handle, hDC);
 	screen_dispatch();
