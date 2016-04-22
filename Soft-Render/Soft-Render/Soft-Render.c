@@ -75,10 +75,6 @@ typedef struct {
 
 TransformMatrix transformMatrix;
 
-void ApplyClipping()//裁剪变换
-{
-	;
-}
 void ApplyHomogenize()//归一化到NDC
 {
 	float rhw = 0;
@@ -105,7 +101,6 @@ void ApplyWVPTransform()//世界变换
 	{
 		matrix_apply(&cube_processed[i].pos, &cube[i].pos, &transformMatrix.transform);//到CVV空间
 	};
-	ApplyClipping();//裁剪
 }
 
 Color GetTexture(float u, float v)
@@ -114,6 +109,11 @@ Color GetTexture(float u, float v)
 // 	int red = nColorRef & 255;//这样从COLORREF中获取RGB
 // 	int green = nColorRef >> 8 & 255;
 // 	int blue = nColorRef >> 16 & 255;
+	if (u<0||v<0||u>255||v>255)
+	{
+		Color result = { 255, 0, 0 };
+		return result;
+	}
 #if 1
 // 	u *= 256.0f;
 // 	v *= 256.0f;
@@ -131,7 +131,7 @@ Color GetTexture(float u, float v)
 	return result;
 
 #endif // 0
-// return texbuffer[(int)u][(int)v];
+ return texbuffer[(int)u][(int)v];
 //	return a;
 
 }
@@ -204,17 +204,19 @@ Vector dir_light = { -3,3,-10,1 };//向右边照的方向光
 	ymax = ymax > y3 ? ymax : y3;
 
 	int red = 0, green = 0, blue = 0;
-	const int xmm = xmax;
-	const int ymm = ymax;
+	const int xend = xmax < 800 ? xmax : 800;
+	const int yend = ymax < 600 ? ymax : 600;
+	const int xstart = xmin > 0 ? xmin : 0;
+	const int ystart = ymin > 0 ? ymin : 0;
 	double zr = 0;
 	Color texColor;
 	const float p1w = p1->pos.w, p2w = p2->pos.w, p3w = p3->pos.w;
 	const float p1u = p1->texcoord.u, p2u = p2->texcoord.u, p3u = p3->texcoord.u;
 	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
-//#pragma omp parallel for private(x,y) num_threads(4)
-	for (x = xmin; x < xmm; x++)
+#pragma omp parallel for private(x,y) num_threads(4)
+	for (x = xstart; x < xend; x++)
 	{
-		for (y = ymin; y < ymm; y++)
+		for (y = ystart; y < yend; y++)
 		{
 			c = ((y1 - y2)*x + (x2 - x1)*y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
 			b = ((y1 - y3)*x + (x3 - x1)*y + x1*y3 - x3*y1) / ((y1 - y3)*x2 + (x3 - x1)*y2 + x1*y3 - x3*y1);
@@ -229,11 +231,11 @@ Vector dir_light = { -3,3,-10,1 };//向右边照的方向光
 					v = ((a*(p1v / p1w) + b*(p2v / p2w) + c*(p3v / p3w)) / zr) * 255.0;//h
 					zbuffer[(int)y * 800 + (int)x] = z;
 
-					const float re255 = 1.0f / 255.0f;
+					const float inv255 = 1.0f / 255.0f;
 					texColor = GetTexture(u, v);
-					float r = (float)texColor.r*re255*diffuse;
-					float g = (float)texColor.g*re255*diffuse;
-					float b = (float)texColor.b*re255*diffuse;
+					float r = (float)texColor.r*inv255*diffuse;
+					float g = (float)texColor.g*inv255*diffuse;
+					float b = (float)texColor.b*inv255*diffuse;
 
 					framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
 // 					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
@@ -264,14 +266,14 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, float diffuse)//绘制图元
 // 	normal.y = (p2->pos.z - p1->pos.z) * (p3->pos.x - p1->pos.x) - (p3->pos.z - p1->pos.z) * (p2->pos.x - p1->pos.x);
 // 	normal.z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y);
 // 	vector_normalize(&normal);//光照模型里法线要规范化
-	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y) > 0.0f)
+// 	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y) > 0.0f)
 	{
 		//开始光栅化
 		Barycentric(p1, p2, p3, diffuse);
 	}
 }
 
-void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的索引
+void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 {
 
 	Vertex* p1 = &cube_processed[a], *p2 = &cube_processed[b], *p3 = &cube_processed[c], *p4 =& cube_processed[d];
@@ -286,45 +288,54 @@ void DrawPlane(int a,int b,int c, int d,int color)//绘制四边形，四个参数为顶点的
 	//在这里就把光照算好算了...一个平面一个光照，对平行光来说
 	Pos normal = { 0,0,0,0 };
 	Pos* op1 = &cube[a].pos, *op2 = &cube[b].pos, *op3 = &cube[c].pos, *op4 = &cube[d].pos;
-	Pos wp1, wp2, wp3, wp4;
 
-	matrix_apply(&wp1, op1, &transformMatrix.world);
-	matrix_apply(&wp2, op2, &transformMatrix.world);
-	matrix_apply(&wp3, op3, &transformMatrix.world);
-	matrix_apply(&wp4, op4, &transformMatrix.world);
 	// 	已知三点求三角形法向量(a,b,c)
 // 		a = ((p2.y - p1.y)*(p3.z - p1.z) - (p2.z - p1.z)*(p3.y - p1.y));
-// 
 // 		b = ((p2.z - p1.z)*(p3.x - p1.x) - (p2.x - p1.x)*(p3.z - p1.z));
-// 
 // 		c = ((p2.x - p1.x)*(p3.y - p1.y) - (p2.y - p1.y)*(p3.x - p1.x));	
-	normal.x = (wp2.y - wp1.y) * (wp3.z - wp1.z) - (wp3.y - wp1.y) * (wp2.z - wp1.z);
-	normal.y = (wp2.z - wp1.z) * (wp3.x - wp1.x) - (wp3.z - wp1.z) * (wp2.x - wp1.x);
-	normal.z = (wp2.x - wp1.x) * (wp3.y - wp1.y) - (wp3.x - wp1.x) * (wp2.y - wp1.y);
-	//test
-	normal.x = (op2->y - op1->y) * (op3->z - op1->z) - (op3->y - op1->y) * (op2->z - op1->z);
-	normal.y = (op2->z - op1->z) * (op3->x - op1->x) - (op3->z - op1->z) * (op2->x - op1->x);
-	normal.z = (op2->x - op1->x) * (op3->y - op1->y) - (op3->x - op1->x) * (op2->y - op1->y);
+	// 	//这个算出的op面法向量是对的，按上面的公式法向量反了
+	normal.x = (op2->y - op3->y) * (op1->z - op3->z) - (op1->y - op3->y) * (op2->z - op3->z);
+	normal.y = (op2->z - op3->z) * (op1->x - op3->x) - (op1->z - op3->z) * (op2->x - op3->x);
+	normal.z = (op2->x - op3->x) * (op1->y - op3->y) - (op1->x - op3->x) * (op2->y - op3->y);
+	Vector L; Vector normal_rotated;
+	Vector dir_light = { 3,0,-0,0 };//向屏幕内照的方向光
 
-	vector_normalize(&normal);//光照模型里法线要规范化
-	Pos L;
-	Vector dir_light = { -50,0,-0,0 },dir;//向前面照的方向光
-	matrix_apply(&dir, &dir_light, &transformMatrix.world);
-	Pos p = { (op1->x + op2->x + op3->x + op4->x)*0.25f,(op1->y + op2->y + op3->y + op4->y)*0.25f ,(op1->z + op2->z + op3->z + op4->z)*0.25f,1 };
-	vector_sub(&L, &dir, &p);
+	matrix_apply(&normal_rotated, &normal, &transformMatrix.world);
+	Vector normal_cameraspace;
+	matrix_apply(&normal_cameraspace, &normal, &transformMatrix.transform);
+	if (normal_cameraspace.z > 0)
+	{
+		return;
+	}
+	vector_normalize(&normal_rotated);//光照模型里法线要规范化
+	Vector p = { (op1->x + op2->x + op3->x + op4->x)*0.25f, (op1->y + op2->y + op3->y + op4->y)*0.25f, (op1->z + op2->z + op3->z + op4->z)*0.25f, 1 };
+	Vector p_rotated;
+	matrix_apply(&p_rotated, &p, &transformMatrix.world);
+	vector_sub(&L, &dir_light, &p_rotated);
 	vector_normalize(&L);
-// 	Vector R,temp;
+// 	Phong模型认为镜面反射的光强与反射光线和视线的夹角相关：
+// 		Ispec = Ks * Il * (dot(V, R)) ^ Ns
+// 		其中Ks 为镜面反射系数,Il是光源强度，Ns是高光指数，V表示从顶点到视点的观察方向，R代表反射光方向。由于反射光的方向R可以通过入射光方向L(从顶点指向光源)和物体的法向量求出，
+// 		R + L = 2 * dot(N, L) * N  即 R = 2 * dot(N, L) * N - L
+// 		所以最终的计算式为：
+// 		Ispec = Ks * Il * (dot(V, (2 * dot(N, L) * N – L)) ^ Ns
+		float Ks = 0.7f, Il = 1.0f,Ns = 20.0f;
+		Vector V; vector_sub(&V, &dir_light, &p_rotated);
+		vector_normalize(&V);
+		Vector t = vector_multply(&normal_rotated, 2.0f*vector_dotproduct(&L, &normal_rotated));
+		Vector R; vector_sub(&R, &t, &L);
+		vector_normalize(&R);
+		float Ispec = Ks*Il*powf(vector_dotproduct(&V, &R), Ns);
+		Ispec = max(Ispec, 0);
+// 		Ispec = min(Ispec, 1);
+		// 	Vector R,temp;
 // 	temp = vector_multply(normal, vector_dotproduct(&_2N, &L));
 // 	vector_sub(&R, &temp, &L);
-	float aaa = vector_dotproduct(&L, &normal);
-	if (aaa<0)
-	{
-		aaa = -aaa;
-	}
-	float diffuse = max(aaa, 0);
-	diffuse = min(diffuse, 1);
+	float diffuse = vector_dotproduct(&L, &normal_rotated);
+	diffuse = max(diffuse, 0);
+// 	diffuse = min(diffuse, 1);
 
-	DrawPrimitive(p3, p2, p1, diffuse);//分成三角形图元绘制
+	DrawPrimitive(p3, p2, p1, diffuse);//分成三角形图元绘制，逆时针为绘制方式
 	DrawPrimitive(p1, p4, p3, diffuse);
 }
 
@@ -334,71 +345,52 @@ void UpdateMVPMatrix()
 	matrix_mul(&m, &transformMatrix.world, &transformMatrix.view);
 	matrix_mul(&transformMatrix.transform, &m, &transformMatrix.projection);// transform = world * view * projection
 }
-
+static int _switch = 1;
 int FPS = 0;
-void DrawCube(float self_angle)
+
+void DrawCube()
 {
 	int x, y;
-// 	for (x = 350; x < 450; x++)
-// 	{
-// 		for (y = 250; y < 350; y++)
-// 		{
-// 			// 	for (x = xmin; x < xmm; x++)
-// 			// 	{
-// 			// 		for (y = ymin; y < ymm; y++)
-// 			// 		{
-// 			framebufferPtr[y][x] = RGB(0, 0, 0);
-// 		}
-// 	}
-// 	return;
 	ApplyWVPTransform();//顶点坐标从局部坐标系转到裁剪后的NDC
 	for (size_t i = 0; i < 8; i++)
 	{
 		cube_camera_w[i] = cube_processed[i].pos.w;
-	};
+	}
 	//乘透视变换矩阵后到了CVV所在的空间，由于CVV是个立方体，可以很方便的裁剪。但是CVV是个立方体，所以长宽比这时候会变化，需要后续修正
 	ApplyHomogenize();//归一化到NDC
 	//开始光栅化
 
-	DrawPlane(2, 3, 0, 1, 100);//原来的
-	DrawPlane(0, 4, 5, 1, -50);
-	DrawPlane(1, 5, 6, 2, 200);
-	DrawPlane(3, 2, 6, 7, -550);
-
-	DrawPlane(3, 7, 4, 0, 0);//一开始面向屏幕
-	DrawPlane(7, 6, 5, 4, -250);//一开始面向屏幕右侧
+	DrawPlane(2, 3, 0, 1);
+	DrawPlane(0, 4, 5, 1);
+	DrawPlane(1, 5, 6, 2);
+	DrawPlane(3, 2, 6, 7);
+	DrawPlane(7, 4, 0, 3);//一开始面向屏幕
+	DrawPlane(7, 6, 5, 4);//
 
 	FPS++;
-
-// 	DrawPlane( 0, 1, 2, 3, 0);
-// 	DrawPlane( 4, 5, 6, 7, 0);
-// 	DrawPlane( 0, 4, 5, 1, 0);
-// 	DrawPlane( 1, 5, 6, 2, 0);
-// 	DrawPlane( 2, 6, 7, 3, 0);
-// 	DrawPlane( 3, 7, 4, 0, 0);
-
 }
 
-int _switch = 1;
+
 void RotateCube(float angle)
 {
 	matrix_t m;
-// 	if(_switch == 1)matrix_set_rotate(&m, -0, -1, 0, angle);//左右转
-// // 	matrix_set_rotate(&m, -1,-0 , 0, angle);//平着转
-	 matrix_set_rotate(&m,  -0, 0,-1, angle);//上下转
-// 	matrix_set_rotate(&m, -1, -0.5, 1, angle);//算旋转矩阵
+// 	matrix_set_rotate(&m, 0, 1, 0, angle);//沿y轴转
+// 	matrix_set_rotate(&m, 1,0 , 0, angle);//沿x轴转
+// 	 matrix_set_rotate(&m,  0, 0,1, angle);//沿z轴转
+	matrix_set_rotate(&m, -1, -0.5, 1, angle);//算旋转矩阵
 	transformMatrix.world = m;
 	UpdateMVPMatrix();//更新矩阵
 }
 
-void SetCameraLookAt(TransformMatrix *transformMatrix, float x, float y, float z) {
-	point_t eye = { x, y, z, 1 }, at = { 0, -0, -0, 0 }, up = { 0, 0, 1, 1 };
+void SetCameraLookAt(TransformMatrix *transformMatrix, float x, float y, float z) {//todo::这个函数有个问题，lookat算出来的view矩阵不太对，可以固定相机位置在（0,3,0），只绘制（3,2,7,6）这个面的某个三角形来重现，在MVP变换后，归一化之前，CVV里的坐标就错了
+	point_t eye = { x, y, z, 1 }, at = { 0, 0, 0, 1 }, up = { 0, 0, 1, 0 };//y向上
 	matrix_set_identity(&transformMatrix->world);
 	matrix_set_identity(&transformMatrix->view);
 	matrix_set_perspective(&transformMatrix->projection, 3.1415926f * 0.5f, 800.0f/600.0f, 1.0f, 500.0f);
 	matrix_set_lookat(&transformMatrix->view, &eye, &at, &up);
 	UpdateMVPMatrix();
 }
+
 void BindFB(int width, int height, void *fb) {
 // 	int need = sizeof(void*) * (height * 2 + 1024) + width * height * 8;
 // 	char *ptr = (char*)malloc(need + 64);
@@ -491,18 +483,28 @@ int  main()
 	screen_init(800, 600, _T("Cube"));
 	BindFB(800, 600, screen_fb);
 
-	static float x = 3.2, y = 0, z = 0;
-	SetCameraLookAt(&transformMatrix, 2, 0, 0);
+	static float x = 3, y = 0, z = 0;
 	SetTimer(NULL,1, 1000, timerProc);
-//	clock_t start, finish;
-//	float  fps;
-	/* 测量一个事件持续的时间*/
-	while (1/*screen_exit == 0 && screen_keys[VK_ESCAPE] == 0*/) {
-// 		start = clock();
-// 		if (screen_keys[VK_LEFT])
+	SetCameraLookAt(&transformMatrix, 3, 0, 0);
+	while (1/*screen_exit == 0 && screen_keys[VK_ESCAPE] == 0*/)
+	{
 		if (screen_keys[VK_SPACE])
 			_switch = -_switch;
+// 		if (_switch == 1)
+// 			SetCameraLookAt(&transformMatrix, 3, 0, 0);
+// 		else if (_switch == -1)
+// 			SetCameraLookAt(&transformMatrix, -3, 0, 0);
+		if (screen_keys[VK_UP])
 		{
+			x -= 0.2;
+			SetCameraLookAt(&transformMatrix, x, 0, 0);
+		}
+		if (screen_keys[VK_DOWN])
+		{
+			x += 0.2;
+			SetCameraLookAt(&transformMatrix, x, 0, 0);
+		}
+	{
 			self_angle += 0.005f;
 // 			self_angle -=90.0f;
 			RotateCube(self_angle);
@@ -516,15 +518,12 @@ int  main()
 // 			ClearFrameBuffer();
 // 		}
 
-		DrawCube(self_angle);
+		DrawCube();
 
 		screen_update();
 // 		getchar();
 		ClearFrameBuffer();
-//  	getchar();
 // 		Sleep(100);
 	}
-	// 	continue;
-
 	return 0;
 }

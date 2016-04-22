@@ -187,7 +187,7 @@ void matrix_set_rotate(matrix_t *m, float x, float y, float z, float theta) {
 }
 
 // 设置摄像机
-void matrix_set_lookat(matrix_t *m, const Pos *eye, const Pos *at, const Pos *up) {
+void matrix_set_lookat(matrix_t *m, const Pos *eye, const Pos *at, const Pos *up) {//来自 https://msdn.microsoft.com/zh-cn/library/windows/desktop/bb205342(v=vs.85).aspx
 	Pos xaxis, yaxis, zaxis;
 
 	vector_sub(&zaxis, at, eye);
@@ -216,7 +216,7 @@ void matrix_set_lookat(matrix_t *m, const Pos *eye, const Pos *at, const Pos *up
 }
 
 // D3DXMatrixPerspectiveFovLH
-void matrix_set_perspective(matrix_t *m, float fovy, float aspect, float zn, float zf) {
+void matrix_set_perspective(matrix_t *m, float fovy, float aspect, float zn, float zf) {//来自 https://msdn.microsoft.com/en-us/library/windows/desktop/bb205350(v=vs.85).aspx
 	float fax = 1.0f / (float)tan(fovy * 0.5f);
 	matrix_set_zero(m);
 	m->m[0][0] = (float)(fax / aspect);
