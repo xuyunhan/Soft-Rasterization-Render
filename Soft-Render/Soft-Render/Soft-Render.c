@@ -126,12 +126,12 @@ Color GetTexture(float u, float v)
 	float u_opposite = 1 - u_ratio;
 	float v_opposite = 1 - v_ratio;
 	Color test = { 255, 126, 33 };
-// 	int r = ((texbuffer[x][y].r) * u_opposite + (texbuffer[x + 1][y].r) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].r) * u_opposite + (texbuffer[x + 1][y + 1].r) * u_ratio) * v_ratio;
-// 	int g = ((texbuffer[x][y].g) * u_opposite + (texbuffer[x + 1][y].g) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].g) * u_opposite + (texbuffer[x + 1][y + 1].g) * u_ratio) * v_ratio;
-// 	int b = ((texbuffer[x][y].b) * u_opposite + (texbuffer[x + 1][y].b) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].b) * u_opposite + (texbuffer[x + 1][y + 1].b) * u_ratio) * v_ratio;
-	int r = ((test.r) * u_opposite + (test.r) * u_ratio) * v_opposite + ((test.r) * u_opposite + (test.r) * u_ratio) * v_ratio;
-	int g = ((test.g) * u_opposite + (test.g) * u_ratio) * v_opposite + ((test.g) * u_opposite + (test.g) * u_ratio) * v_ratio;
-	int b = ((test.b) * u_opposite + (test.b) * u_ratio) * v_opposite + ((test.b) * u_opposite + (test.b) * u_ratio) * v_ratio;
+	int r = ((texbuffer[x][y].r) * u_opposite + (texbuffer[x + 1][y].r) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].r) * u_opposite + (texbuffer[x + 1][y + 1].r) * u_ratio) * v_ratio;
+	int g = ((texbuffer[x][y].g) * u_opposite + (texbuffer[x + 1][y].g) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].g) * u_opposite + (texbuffer[x + 1][y + 1].g) * u_ratio) * v_ratio;
+	int b = ((texbuffer[x][y].b) * u_opposite + (texbuffer[x + 1][y].b) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].b) * u_opposite + (texbuffer[x + 1][y + 1].b) * u_ratio) * v_ratio;
+// 	int r = ((test.r) * u_opposite + (test.r) * u_ratio) * v_opposite + ((test.r) * u_opposite + (test.r) * u_ratio) * v_ratio;
+// 	int g = ((test.g) * u_opposite + (test.g) * u_ratio) * v_opposite + ((test.g) * u_opposite + (test.g) * u_ratio) * v_ratio;
+// 	int b = ((test.b) * u_opposite + (test.b) * u_ratio) * v_opposite + ((test.b) * u_opposite + (test.b) * u_ratio) * v_ratio;
 	Color result = { r, g, b };
 	return result;
 
