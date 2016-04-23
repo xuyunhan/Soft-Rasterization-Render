@@ -125,11 +125,14 @@ Color GetTexture(float u, float v)
 	float v_ratio = v - y;
 	float u_opposite = 1 - u_ratio;
 	float v_opposite = 1 - v_ratio;
-
-	unsigned short r = ((texbuffer[x][y].r) * u_opposite + (texbuffer[x + 1][y].r) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].r) * u_opposite + (texbuffer[x + 1][y + 1].r) * u_ratio) * v_ratio;
-	unsigned short g = ((texbuffer[x][y] .g) * u_opposite + (texbuffer[x + 1][y] .g) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] .g) * u_opposite + (texbuffer[x + 1][y + 1] .g) * u_ratio) * v_ratio;
-	unsigned short b = ((texbuffer[x][y] .b) * u_opposite + (texbuffer[x + 1][y] .b) * u_ratio) * v_opposite + ((texbuffer[x][y + 1] .b) * u_opposite + (texbuffer[x + 1][y + 1] .b) * u_ratio) * v_ratio;
-	Color result = { r,g,b };
+	Color test = { 255, 126, 33 };
+// 	int r = ((texbuffer[x][y].r) * u_opposite + (texbuffer[x + 1][y].r) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].r) * u_opposite + (texbuffer[x + 1][y + 1].r) * u_ratio) * v_ratio;
+// 	int g = ((texbuffer[x][y].g) * u_opposite + (texbuffer[x + 1][y].g) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].g) * u_opposite + (texbuffer[x + 1][y + 1].g) * u_ratio) * v_ratio;
+// 	int b = ((texbuffer[x][y].b) * u_opposite + (texbuffer[x + 1][y].b) * u_ratio) * v_opposite + ((texbuffer[x][y + 1].b) * u_opposite + (texbuffer[x + 1][y + 1].b) * u_ratio) * v_ratio;
+	int r = ((test.r) * u_opposite + (test.r) * u_ratio) * v_opposite + ((test.r) * u_opposite + (test.r) * u_ratio) * v_ratio;
+	int g = ((test.g) * u_opposite + (test.g) * u_ratio) * v_opposite + ((test.g) * u_opposite + (test.g) * u_ratio) * v_ratio;
+	int b = ((test.b) * u_opposite + (test.b) * u_ratio) * v_opposite + ((test.b) * u_opposite + (test.b) * u_ratio) * v_ratio;
+	Color result = { r, g, b };
 	return result;
 
 #endif // 0
@@ -138,6 +141,19 @@ Color GetTexture(float u, float v)
 
 }
 
+void NDCToCameraSpace(Pos *dst, const Pos* src)
+{
+// 	float rhw = 1.0f / src->w;
+// 	dst->x = (src->x / 400.0f - 1.0f) / rhw;
+	dst->x = (src->x / 400.0f - 1.0f) * src->w;
+// 	dst->y = (1 - src->y / 300.0f) / rhw;
+	dst->y = (1 - src->y / 300.0f) * src->w;
+// 	dst->z = src->z / rhw;
+	dst->z = src->z* src->w;
+	dst->w = src->w;
+	return;
+}
+Pos dir_light_world = { 1, 0, 0, 1 };
 void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_rotated_camera_normalized, Vector* p1_camera, Vector* p2_camera, Vector* p3_camera, float diffuse)//绘制图元
 {
 	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y) < 0.0f)// 背面消隐
@@ -182,6 +198,12 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 	float D2 = -(A*x1_camera + B*y1_camera + C*z1_camera);
 	float deltaZperX2 = -A2 / C2;//以（x1,y1,z1）为起始点
 	float deltaZperY2 = -B2 / C2;
+
+	float deltaXperY2 = -B2 / A2;//以（x1,y1,z1）为起始点
+	float deltaXperZ2 = -C2 / A2;
+
+	float deltaYperX2 = -A2 / B2;//以（x1,y1,z1）为起始点
+	float deltaYperZ2 = -C2 / B2;
 
 	float z = 0;
 	//纹理
@@ -242,16 +264,28 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
 	
 	//逐像素光照
-// 	Vector L;
-// 	Vector dir_light_world = { 3, 0, 0, 0 };//向屏幕内照的方向光
-// 
-// 	Pos p;// = { (op1->x + op2->x + op3->x + op4->x)*0.25f, (op1->y + op2->y + op3->y + op4->y)*0.25f, (op1->z + op2->z + op3->z + op4->z)*0.25f, 1 };
-// 	Pos p_rotated_world;
-// 
-// 	vector_sub(&L, &dir_light_world, &p_rotated_world);
-// 	vector_normalize(&L);
+	Vector L;
+	Pos dir_light_camera, dir_light_NDC;//向屏幕内照的方向光
+	Pos t1,t2,t3,t4;//临时变量
+	matrix_apply(&t3, &cube[0].pos, &transformMatrix.world);
+	matrix_apply(&t1, &dir_light_world, &transformMatrix.view);
+	matrix_apply(&t2, &t3, &transformMatrix.view);
+	matrix_apply(&dir_light_camera, &t1, &transformMatrix.projection);
+	matrix_apply(&t4, &t2, &transformMatrix.projection);
+	float rhw = 1.0f / dir_light_camera.w;
+	dir_light_NDC.x = (dir_light_camera.x * rhw + 1.0f) * 800.0f * 0.5f;
+	dir_light_NDC.y = (1.0f - dir_light_camera.y * rhw) * 600.0f * 0.5f;
+	dir_light_NDC.z = dir_light_camera.z * rhw;
+	dir_light_NDC.w = dir_light_camera.w;
 
-// #pragma region Phong模型
+	float diffuse2;
+// 	Pos p;// = { (op1->x + op2->x + op3->x + op4->x)*0.25f, (op1->y + op2->y + op3->y + op4->y)*0.25f, (op1->z + op2->z + op3->z + op4->z)*0.25f, 1 };
+	Pos p_currentDrawing_camera;
+
+	float y_scale = ((ymax_camera - ymin_camera) / (ymax - ymin));
+	float x_scale = ((xmax_camera - xmin_camera) / (xmax - xmin));
+// 	float z_scale = ((zmax_camera - zmin_camera) / (zmax - zmin));
+	// #pragma region Phong模型
 // 	// 	Phong模型认为镜面反射的光强与反射光线和视线的夹角相关：
 // 	// 		Ispec = Ks * Il * (dot(V, R)) ^ Ns
 // 	// 		其中Ks 为镜面反射系数,Il是光源强度，Ns是高光指数，V表示从顶点到视点的观察方向，R代表反射光方向。由于反射光的方向R可以通过入射光方向L(从顶点指向光源)和物体的法向量求出，
@@ -269,12 +303,8 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 // 	// 		Ispec = min(Ispec, 1);
 // #pragma endregion 
 
-// 	float diffuse;
-// 	diffuse = vector_dotproduct(&L, &triangleNormal_rotated_camera_normalized);
-// 	diffuse = max(diffuse, 0);
-
 	//逐像素光照完
-#pragma omp parallel for private(x,y) num_threads(4)
+// #pragma omp parallel for private(x,y) num_threads(4)
 	for (x = xstart; x < xend; x++)
 	{
 		for (y = ystart; y < yend; y++)
@@ -291,12 +321,22 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 					u = ((a*(p1u / p1w) + b*(p3u / p2w) + c*(p3u / p3w)) / zr) * 255.0f;//w
 					v = ((a*(p1v / p1w) + b*(p2v / p2w) + c*(p3v / p3w)) / zr) * 255.0f;//h
 					zbuffer[(int)y * 800 + (int)x] = z;
-
+					//算逐像素光照
+					Pos temp = { x, y, z ,(p1w+p2w+p3w)};
+					NDCToCameraSpace(&p_currentDrawing_camera, &temp);
+// 					p_currentDrawing_camera.x = x1_camera + (y - y1)*x_scale*deltaXperY2 + (z - z1)*x_scale*deltaXperZ2;
+// 					p_currentDrawing_camera.y = y1_camera + (z - z1)*y_scale*deltaYperZ2 + (x - x1)*y_scale*deltaYperX2;
+// 					p_currentDrawing_camera.z = z1_camera + (x - x1)*y_scale*deltaZperX2 + (y - y1)*y_scale*deltaZperY2;
+					vector_sub(&L, &dir_light_camera, &p_currentDrawing_camera);
+					vector_normalize(&L);
+					diffuse2 = vector_dotproduct(&L, triangleNormal_rotated_camera_normalized);
+					diffuse2 = max(diffuse2, 0);
+					//逐像素光照完
 					const float inv255 = 1.0f / 255.0f;
 					texColor = GetTexture(u, v);
-					float r = (float)texColor.r*inv255*diffuse;
-					float g = (float)texColor.g*inv255*diffuse;
-					float b = (float)texColor.b*inv255*diffuse;
+					float r = (float)texColor.r*inv255*diffuse2;
+					float g = (float)texColor.g*inv255*diffuse2;
+					float b = (float)texColor.b*inv255*diffuse2;
 
 					framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
 // 					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
@@ -307,33 +347,6 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 // 	getchar();
 }
 
-void DrawPrimitive_Old(Vertex *p1, Vertex* p2, Vertex* p3,Vector* normal, float diffuse)//绘制图元
-{
-// 	ApplyWorldTransform();//顶点坐标从局部坐标系转到世界坐标系
-// 	ApplyViewTransform();//到相机坐标系
-// 	ApplyProjectionTransform();//到CVV坐标系并透视除法（投影空间）
-// 	ApplyHomogenize();//归一化到NDC
-
-	//背面剔除
-//	double z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p2->pos.y - p1->pos.y) * (p3->pos.x - p1->pos.x);
-// 	已知三点求三角形法向量(a,b,c)
-// 		a = ((p2.y - p1.y)*(p3.z - p1.z) - (p2.z - p1.z)*(p3.y - p1.y));
-// 
-// 		b = ((p2.z - p1.z)*(p3.x - p1.x) - (p2.x - p1.x)*(p3.z - p1.z));
-// 
-// 		c = ((p2.x - p1.x)*(p3.y - p1.y) - (p2.y - p1.y)*(p3.x - p1.x));	
-// 	Vector normal = { 0,0,0,1 };
-// 	normal.x = (p2->pos.y - p1->pos.y) * (p3->pos.z - p1->pos.z) - (p3->pos.y - p1->pos.y) * (p2->pos.z - p1->pos.z);
-// 	normal.y = (p2->pos.z - p1->pos.z) * (p3->pos.x - p1->pos.x) - (p3->pos.z - p1->pos.z) * (p2->pos.x - p1->pos.x);
-// 	normal.z = (p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y);
-// 	vector_normalize(&normal);//光照模型里法线要规范化
-// 	if ((p2->pos.x - p1->pos.x) * (p3->pos.y - p1->pos.y) - (p3->pos.x - p1->pos.x) * (p2->pos.y - p1->pos.y) > 0.0f)
-	{
-		//开始光栅化
-// 		Barycentric(p1, p2, p3, diffuse);
-	}
-
-}
 
 void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 {
@@ -366,7 +379,7 @@ void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 	normal_camera.z = (cp2->x - cp3->x) * (cp1->y - cp3->y) - (cp1->x - cp3->x) * (cp2->y - cp3->y);
 
 	Vector L, normal_rotated, normal_rotated_camera;
-	Vector dir_light_world = { 3,0,-0,0 };//向屏幕内照的方向光
+	Vector dir_light_world = { 2,0,-0,0 };//向屏幕内照的方向光
 
 // 	matrix_apply(&normal_rotated, &normal, &transformMatrix.world);
 // 	matrix_apply(&normal_rotated_camera, &normal_rotated, &transformMatrix.projection);
@@ -386,11 +399,28 @@ void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 	//方向光算diffuse，都在cameraspace里算
 	vector_normalize(&normal_camera);//光照模型里法线要规范化
 	Vector p = { (cp1->x + cp2->x + cp3->x + cp4->x)*0.25f, (cp1->y + cp2->y + cp3->y + cp4->y)*0.25f, (cp1->z + cp2->z + cp3->z + cp4->z)*0.25f, 1 };
-	Vector p_rotated_world; Vector p_rotated_camera; Vector dir_light_camera;
+	Vector pNDC = { (p1->pos.x + p2->pos.x + p3->pos.x + p4->pos.x)*0.25f, (p1->pos.y + p2->pos.y + p3->pos.y + p4->pos.y)*0.25f, (p1->pos.z + p2->pos.z + p3->pos.z + p4->pos.z)*0.25f, 1 };
+	Vector p_rotated_world; Vector p_rotated_camera; Vector dir_light_camera, dir_light_NDC;
 	Vector t1;
 	matrix_apply(&t1, &dir_light_world, &transformMatrix.view);
 	matrix_apply(&dir_light_camera, &t1, &transformMatrix.projection);
-	vector_sub(&L, &dir_light_camera, &p);
+	//把p1从NDC回到cameraspace，并放入test_p_in_cameraspace
+	Pos test_p_in_cameraspace;
+	NDCToCameraSpace(&test_p_in_cameraspace, &p1->pos);
+	//放好了
+// 	Vector normal;
+// 	normal.x = (p2->pos.y - p3->pos.y) * (p1->pos.z - p3->pos.z) - (p1->pos.y - p3->pos.y) * (p2->pos.z - p3->pos.z);
+// 	normal.y = (p2->pos.z - p3->pos.z) * (p1->pos.x - p3->pos.x) - (p1->pos.z - p3->pos.z) * (p2->pos.x - p3->pos.x);
+// 	normal.z = (p2->pos.x - p3->pos.x) * (p1->pos.y - p3->pos.y) - (p1->pos.x - p3->pos.x) * (p2->pos.y - p3->pos.y);
+// 	normal.w = 0;
+// 	vector_normalize(&normal);
+// 	float rhw = 1.0f / dir_light_camera.w;
+// 	dir_light_NDC.x = (dir_light_camera.x * rhw + 1.0f) * 800.0f * 0.5f;
+// 	dir_light_NDC.y = (1.0f - dir_light_camera.y * rhw) * 600.0f * 0.5f;
+// 	dir_light_NDC.z = dir_light_camera.z * rhw;
+// 	dir_light_NDC.w = dir_light_camera.w;
+	vector_sub(&L, &dir_light_camera, &test_p_in_cameraspace);
+
 	vector_normalize(&L);
 	float diffuse = vector_dotproduct(&L, &normal_camera);
 	diffuse = max(diffuse, 0);
@@ -414,11 +444,11 @@ void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 // 		Ispec = min(Ispec, 1);
 #pragma endregion 
 
-	Pos op1_world, op2_world, op3_world, op4_world;
-	matrix_apply(&op1_world, op1, &transformMatrix.world);
-	matrix_apply(&op2_world, op2, &transformMatrix.world);
-	matrix_apply(&op3_world, op3, &transformMatrix.world);
-	matrix_apply(&op4_world, op4, &transformMatrix.world);
+// 	Pos op1_world, op2_world, op3_world, op4_world;
+// 	matrix_apply(&op1_world, op1, &transformMatrix.world);
+// 	matrix_apply(&op2_world, op2, &transformMatrix.world);
+// 	matrix_apply(&op3_world, op3, &transformMatrix.world);
+// 	matrix_apply(&op4_world, op4, &transformMatrix.world);
 	//分成三角形图元绘制，逆时针为绘制方式
 	DrawPrimitive(p3, p2, p1, &normal_camera, cp3, cp3, cp1, diffuse);//传进去的cp是cameraspace下的顶点坐标
 	DrawPrimitive(p1, p4, p3, &normal_camera, cp1, cp4, cp3, diffuse);
@@ -578,6 +608,8 @@ int  main()
 // 			SetCameraLookAt(&transformMatrix, 3, 0, 0);
 // 		else if (_switch == -1)
 // 			SetCameraLookAt(&transformMatrix, -3, 0, 0);
+// 		if (screen_keys[VK_LEFT])
+
 		if (screen_keys[VK_UP])
 		{
 			x -= 0.2;
