@@ -23,7 +23,7 @@ void vector_add(Pos *z, const Pos *x, const Pos *y) {
 	z->x = x->x + y->x;
 	z->y = x->y + y->y;
 	z->z = x->z + y->z;
-	z->w = 1.0;
+	z->w = 1.0f;
 }
 
 // z = x - y
@@ -31,7 +31,7 @@ void vector_sub(Pos *z, const Pos *x, const Pos *y) {
 	z->x = x->x - y->x;
 	z->y = x->y - y->y;
 	z->z = x->z - y->z;
-	z->w = 1.0;
+	z->w = 1.0f;
 }
 // ·µ»Ø x * y
 Pos vector_multply(const Pos *x, const float y) {
