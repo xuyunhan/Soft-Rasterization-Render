@@ -164,6 +164,15 @@ void matrix_set_scale(matrix_t *m, float x, float y, float z) {
 
 // 旋转矩阵
 void matrix_set_rotate(matrix_t *m, float x, float y, float z, float theta) {
+//只沿Z轴的旋转，调试用
+// 	matrix_set_zero(m);
+// 	m->m[0][0] = cos(theta);
+// 	m->m[0][2] = sin(theta);
+// 	m->m[1][0] = -sin(theta);
+// 	m->m[1][1] = cos(theta);
+// 	m->m[2][2] = 1.0f;
+// 	return;
+//调试用的结束
 	float qsin = (float)sin(theta * 0.5f);
 	float qcos = (float)cos(theta * 0.5f);
 	Pos vec = { x, y, z, 1.0f };

@@ -24,15 +24,6 @@
     <ClInclude Include="Soft-Render.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="FreeImage.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="FreeImage.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="FreeImage.lib" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Soft-Render.c">

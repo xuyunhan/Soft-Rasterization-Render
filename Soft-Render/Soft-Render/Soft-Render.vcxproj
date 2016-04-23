@@ -185,16 +185,9 @@
     <ClCompile Include="Soft-Render.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FreeImage.h" />
     <ClInclude Include="Math_Lib.h" />
     <ClInclude Include="Show_Window.h" />
     <ClInclude Include="Soft-Render.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="FreeImage.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="FreeImage.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
