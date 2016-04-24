@@ -199,7 +199,6 @@
   <ItemGroup>
     <ClInclude Include="Math_Lib.h" />
     <ClInclude Include="Show_Window.h" />
-    <ClInclude Include="Soft-Render.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
