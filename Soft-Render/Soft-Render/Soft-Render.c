@@ -110,11 +110,11 @@ void GetTexture(float u, float v)
 // 	int red = nColorRef & 255;//这样从COLORREF中获取RGB
 // 	int green = nColorRef >> 8 & 255;
 // 	int blue = nColorRef >> 16 & 255;
-// 	if (u<0||v<0||u>255||v>255)
-// 	{
-// 		Color_float d = { 1, 0, 0 };
-// 		return d;
-// 	}
+	if (u<0||v<0||u>254||v>254)
+	{
+		Color_float d = { 1, 0, 0 };
+		return d;
+	}
 #if 1 //二次线性插值
 // 	u *= 256.0f;
 // 	v *= 256.0f;
@@ -159,6 +159,211 @@ void NDCToCameraSpace(Pos *dst, const Pos* src)
 Vector L;
 Pos point_light_camera;
 Pos t1;
+
+void DrawFlatBottomTriangle(Pos * pointTop, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
+{
+	int xtop = pointTop->x, xleft = pointLeft->x, xright = pointRight->x, ytop = pointTop->y, ybtm = pointLeft->y;//平底三角形，pointLeft和pointRight的y都是ybtm
+
+	if (xleft < 0) xleft = 0;
+	if (xright>800) xright = 800;
+	if (ytop < 0) ytop = 0;
+	if (ybtm > 600)ybtm = 600;
+
+	int dx1 = xtop - xleft;
+	int dy1 = ybtm - ytop;
+	int dx2 = xtop - xright;
+	int dy2 = ybtm - ytop;
+	//test
+#pragma region 定义
+	float x1 = p1->pos.x;
+	float y1 = p1->pos.y;
+	float z1 = p1->pos.z;
+	float x2 = p2->pos.x;
+	float y2 = p2->pos.y;
+	float z2 = p2->pos.z;
+	float x3 = p3->pos.x;
+	float y3 = p3->pos.y;
+	float z3 = p3->pos.z;
+	const float p1w = p1->pos.w, p2w = p2->pos.w, p3w = p3->pos.w;
+	const float p1u = p1->texcoord.u, p2u = p2->texcoord.u, p3u = p3->texcoord.u;
+	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
+	const float invp1w = 1.0f / p1w, invp2w = 1.0f / p2w, invp3w = 1.0f / p3w;
+
+#pragma endregion 
+
+	int xstep1 = 1, xstep2 = 1;
+	if (dy1 <= 0 || dy2 <= 0)
+		return;
+	if (dx1 < 0)
+	{
+		xstep1 = -1;
+		dx1 = -dx1;
+	}
+	if (dx2 < 0)
+	{
+		xstep2 = -1;
+		dx2 = -dx2;
+	}
+
+	int error1 = 2 * dx1 - dy1, error2 = 2 * dx2 - dy2;
+	int x1tmp = xleft, x2tmp = xright;
+	int x, y;
+	Pos p_currentDrawing_camera;
+// #pragma omp parallel for private(y,x) num_threads(1)
+	for (y = ybtm; y >= ytop; y--)
+	{
+		while (error1 > 0)
+		{
+			x1tmp += xstep1;
+			error1 -= 2 * dy1;
+		}
+		while (error2 > 0)
+		{
+			x2tmp += xstep2;
+			error2 -= 2 * dy2;
+		}
+
+		int dx = x2tmp - x1tmp;
+
+		for (x = x1tmp; x <= x2tmp; x++)
+		{
+			float px = (float)x;
+			float c = ((y1 - y2)*px + (x2 - x1)*(float)y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
+			float b = ((y1 - y3)*px + (x3 - x1)*(float)y + x1*y3 - x3*y1) / ((y1 - y3)*x2 + (x3 - x1)*y2 + x1*y3 - x3*y1);
+			float a = 1 - b - c;
+			float z = z1 + (px - x1) *deltaZperX + ((float)y - y1)*deltaZperY;//算该三角形的Z值
+// 				if (z < (zbuffer[(int)y * 800 + (int)x]))//若离屏幕更近则显示否则舍弃
+			{
+				float invzr = 1.0f / (a*(invp1w)+b*(invp2w)+c*(invp3w));
+				float u = ((a*(p1u *invp1w) + b*(p3u *invp2w) + c*(p3u *invp3w)) *invzr) * 254.0f;//w
+				float v = ((a*(p1v *invp1w) + b*(p2v *invp2w) + c*(p3v *invp3w)) *invzr) * 254.0f;//h
+// 					zbuffer[(int)y * 800 + (int)x] = z;
+				//算逐像素光照
+				Pos temp = { x, y, z, invzr };
+				NDCToCameraSpace(&p_currentDrawing_camera, &temp);
+				vector_sub(&L, &point_light_camera, &p_currentDrawing_camera);
+				L.w = 1;
+				vector_normalize(&L);
+				float diffuse2 = vector_dotproduct(&L, triangleNormal_rotated_camera_normalized);
+				diffuse2 = max(diffuse2, 0);
+// 					diffuse2 = min(diffuse2, 0.9f);
+				//逐像素光照完
+				GetTexture(u, v);
+				float r = result->r * diffuse2;
+				float g = result->g * diffuse2;
+				float b = result->b * diffuse2;
+				framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
+			}
+
+// 					framebufferPtr[y][x] = RGB(0,0,0);
+		}
+
+		error1 += 2 * dx1;
+		error2 += 2 * dx2;
+	}
+}
+
+void DrawFlatTopTriangle(Pos * pointBottom, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
+{
+	int xbottom = pointBottom->x, xleft = pointLeft->x, xright = pointRight->x, ytop = pointBottom->y, ybtm = pointLeft->y;//平底三角形，pointLeft和pointRight的y都是ybtm
+	int dx1 = xbottom - xleft;
+	int dy1 = ytop - ybtm;
+	int dx2 = xbottom - xright;
+	int dy2 = ytop - ybtm;
+	int xstep1 = 1, xstep2 = 1;
+
+	if (xleft < 0) xleft = 0;
+	if (xright>800) xright = 800;
+	if (ytop < 0) ytop = 0;
+	if (ybtm > 600)ybtm = 600;
+
+	//test
+#pragma region 定义
+	float x1 = p1->pos.x;
+	float y1 = p1->pos.y;
+	float z1 = p1->pos.z;
+	float x2 = p2->pos.x;
+	float y2 = p2->pos.y;
+	float z2 = p2->pos.z;
+	float x3 = p3->pos.x;
+	float y3 = p3->pos.y;
+	float z3 = p3->pos.z;
+	const float p1w = p1->pos.w, p2w = p2->pos.w, p3w = p3->pos.w;
+	const float p1u = p1->texcoord.u, p2u = p2->texcoord.u, p3u = p3->texcoord.u;
+	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
+	const float invp1w = 1.0f / p1w, invp2w = 1.0f / p2w, invp3w = 1.0f / p3w;
+
+#pragma endregion 
+
+	if (dy1 <= 0 || dy2 <= 0)
+		return;
+	if (dx1 < 0)
+	{
+		xstep1 = -1;
+		dx1 = -dx1;
+	}
+	if (dx2 < 0)
+	{
+		xstep2 = -1;
+		dx2 = -dx2;
+	}
+
+	int error1 = 2 * dx1 - dy1, error2 = 2 * dx2 - dy2;
+	int x1tmp = xleft, x2tmp = xright;
+	Pos p_currentDrawing_camera;
+	int x, y;
+// #pragma omp parallel for private(y,x) num_threads(1)
+	for ( y= ybtm; y <= ytop; y++)
+	{
+		while (error1 > 0)
+		{
+			x1tmp += xstep1;
+			error1 -= 2 * dy1;
+		}
+		while (error2 > 0)
+		{
+			x2tmp += xstep2;
+			error2 -= 2 * dy2;
+		}
+
+		int dx = x2tmp - x1tmp;
+
+		for ( x = x1tmp; x <= x2tmp; x++)
+		{
+			float px = (float)x;
+			float c = ((y1 - y2)*px + (x2 - x1)*(float)y + x1*y2 - x2*y1) / ((y1 - y2)*x3 + (x2 - x1)*y3 + x1*y2 - x2*y1);
+			float b = ((y1 - y3)*px + (x3 - x1)*(float)y + x1*y3 - x3*y1) / ((y1 - y3)*x2 + (x3 - x1)*y2 + x1*y3 - x3*y1);
+			float a = 1 - b - c;
+			float z = z1 + (px - x1) *deltaZperX + ((float)y - y1)*deltaZperY;//算该三角形的Z值
+// 				if (z < (zbuffer[(int)y * 800 + (int)x]))//若离屏幕更近则显示否则舍弃
+			{
+				float invzr = 1.0f / (a*(invp1w)+b*(invp2w)+c*(invp3w));
+				float u = ((a*(p1u *invp1w) + b*(p3u *invp2w) + c*(p3u *invp3w)) *invzr) * 254.0f;//w
+				float v = ((a*(p1v *invp1w) + b*(p2v *invp2w) + c*(p3v *invp3w)) *invzr) * 254.0f;//h
+// 					zbuffer[(int)y * 800 + (int)x] = z;
+				//算逐像素光照
+				Pos temp = { x, y, z, invzr };
+				NDCToCameraSpace(&p_currentDrawing_camera, &temp);
+				vector_sub(&L, &point_light_camera, &p_currentDrawing_camera);
+				L.w = 1;
+				vector_normalize(&L);
+				float diffuse2 = vector_dotproduct(&L, triangleNormal_rotated_camera_normalized);
+				diffuse2 = max(diffuse2, 0);
+// 					diffuse2 = min(diffuse2, 0.9f);
+				//逐像素光照完
+				GetTexture(u, v);
+				float r = result->r * diffuse2;
+				float g = result->g * diffuse2;
+				float b = result->b * diffuse2;
+				framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
+			}
+// 			drawPixel(pVram, x, y, RGBA(r, g, b, 0));
+		}
+
+		error1 += 2 * dx1;
+		error2 += 2 * dx2;
+	}
+}
 
 void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_rotated_camera_normalized, Vector* p1_camera, Vector* p2_camera, Vector* p3_camera)//绘制图元
 {
@@ -214,7 +419,6 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 	const float p1v = p1->texcoord.v, p2v = p2->texcoord.v, p3v = p3->texcoord.v;
 	const float invp1w = 1.0f / p1w, invp2w = 1.0f / p2w, invp3w = 1.0f / p3w;
 	//逐像素光照
-
 	float diffuse2;
 // 	Pos p;// = { (op1->x + op2->x + op3->x + op4->x)*0.25f, (op1->y + op2->y + op3->y + op4->y)*0.25f, (op1->z + op2->z + op3->z + op4->z)*0.25f, 1 };
 	Pos p_currentDrawing_camera;
@@ -230,9 +434,11 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 // 	Ispec = max(Ispec, 0);
 // 		Ispec = min(Ispec, 1);
 #pragma endregion 
-
 	//逐像素光照完
-#pragma omp parallel for private(x,y) num_threads(1)
+
+#if 0
+#pragma region Barycentric算法代码
+// #pragma omp parallel for private(x,y) num_threads(1)
 	for (x = xstart; x < xend; x++)
 	{
 		for (y = ystart; y < yend; y++)
@@ -262,41 +468,64 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 					//逐像素光照完
 					//Phong模型像素光照
 					float specular = 0;
-					if (diffuse2>0)
+					if (diffuse2 > 1.0f)
 					{
 						Vector V; vector_sub(&V, &eye, &p_currentDrawing_camera);
 						vector_normalize(&V);
-						Vector LforPhong; vector_sub(&LforPhong, &point_light_camera, &p_currentDrawing_camera);
-						vector_normalize(&LforPhong);
 						Vector t = vector_multply(&triangleNormal_rotated_camera_normalized, 2.0f*vector_dotproduct(&L, &triangleNormal_rotated_camera_normalized));//t = 2 * dot(N, L) * N
-						Vector R; vector_sub(&R, &t, &L);
+						Vector R; vector_sub(&R, &t, &L);//这里的L前面算出来的可以再用
 						vector_normalize(&R);
 						float Ispec = Ks*Il*powf(vector_dotproduct(&V, &R), Ns);
-						 specular = powf(max(0, vector_dotproduct(&R, &V)), 2);
+						specular = powf(max(0, vector_dotproduct(&R, &V)), 2);
 					}
 					//Phong模型像素光照完
-// 					const float inv255 = 1.0f / 255.0f;
 					GetTexture(u, v);
-// 					float r = result->r * diffuse2 + specular;
-// 					float g = result->g * diffuse2 + specular;
-// 					float b = result->b * diffuse2 + specular;
-					float r = result->r * diffuse2 ;
-					float g = result->g * diffuse2 ;
-					float b = result->b * diffuse2 ;
+					float r = result->r * diffuse2 + specular;
+					float g = result->g * diffuse2 + specular;
+					float b = result->b * diffuse2 + specular;
+// 					float r = result->r * diffuse2 ;
+// 					float g = result->g * diffuse2 ;
+// 					float b = result->b * diffuse2 ;
 					r = min(r, 1); g = min(g, 1); b = min(b, 1);
-// 					result->r *= diffuse2;
-// 					result->g *= diffuse2;
-// 					result->b *= diffuse2;
 
 					framebufferPtr[y][x] = RGB(r*255.0f, g*255.0f, b*255.0f);
-// 					framebufferPtr[x][y] = GetTexture(u, v);// *0x0000c0;
 				}
 			}
 		}
 	}
-// 	getchar();
+#pragma endregion Barycentric算法代码
+#endif
+#pragma region Bresenham算法
+	Pos point1 = p1->pos, point2 = p2->pos, point3 = p3->pos;
+	Pos *pointTop = &point1, *pointLeft = &point1, *pointRight = &point1;
+	//对于任意一个三角形，根据y值分成三个点，ptop、pmid、pbottom，通过xbottom+(xtop-xbottom)/(ybottom-ytop)*(ybottom-ymid)可以算出过pmid点的横线与三角形另一边的交点的x坐标，
+	//此交点和pmid把任意三角形分为平顶三角和平底三角
+	Pos *pmid = &point1, *ptop = &point2 , *pbottom = &point3, *tmp;
+	if (pbottom->y < pmid->y) { tmp = pmid; pmid = pbottom; pbottom = tmp; }//第三个和第二个比较，上浮
+	if (pmid->y < ptop->y) { tmp = pmid; pmid = ptop; ptop = tmp; }//第二个和第一个比较，上浮，此时top已经找到
+	if (pbottom->y < pmid->y) { tmp = pmid; pmid = pbottom; pbottom = tmp; }//第三个和第二个比较，上浮，找到mid和bottom
+	Pos crsPoint = { pbottom->x + (ptop->x - pbottom->x) / (pbottom->y - ptop->y)*(pbottom->y - pmid->y), pmid->y, 0, 0 };
+	if (pmid->x < crsPoint.x) { pointLeft = pmid; pointRight = &crsPoint; }//确定left和right
+	else { pointLeft = &crsPoint; pointRight = pmid; }
+
+	DrawFlatBottomTriangle(ptop, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);
+	DrawFlatTopTriangle(pbottom, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);
+
+// 	if (pointTop->y > point2.y ) pointTop = &point2;
+// 	if (pointTop->y > point3.y) pointTop = &point3;
+// 	if (pointLeft->x >= point2.x && pointLeft->y <=point2.y) pointLeft = &point2;
+// 	if (pointLeft->x >= point3.x && pointLeft->y <=point3.y) pointLeft = &point3;
+// 	if (pointRight->x <= point2.x && pointRight->y <=point2.y) pointRight = &point2;
+// 	if (pointRight->x <= point3.x && pointRight->y <=point3.y) pointRight = &point3;
+	
+
+
+	return;
+#pragma endregion Bresenham算法
+
+	// 	getchar();
 }
-	Pos point_light_world = { 1.3f, 0, 0, 1};
+	Pos point_light_world = { 1.5f, 0, 0, 1};
 
 void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 {
@@ -310,7 +539,7 @@ void DrawPlane(int a,int b,int c, int d)//绘制四边形，四个参数为顶点的索引
 	p3->texcoord.u = 1, p3->texcoord.v = 1, p4->texcoord.u = 1, p4->texcoord.v = 0;
 // 	tp1.texcoord = p1->texcoord; tp2.texcoord = p2->texcoord; tp3.texcoord = p3->texcoord; tp4.texcoord = p4->texcoord;
 	//在这里就把光照算好算了...一个平面一个光照，对平行光来说
-	Vector normal_camera = { 0,0,0,0 };
+	Vector normal_camera = { 0, 0, 0, 0 };
 	Pos* op1 = &cube[a].pos, *op2 = &cube[b].pos, *op3 = &cube[c].pos, *op4 = &cube[d].pos;
 	Pos* cp1 = &cube_camera_space[a], *cp2 = &cube_camera_space[b], *cp3 = &cube_camera_space[c], *cp4 = &cube_camera_space[d];
 
@@ -444,7 +673,7 @@ void RotateCube(float theta)//参数为弧度
 // 	matrix_set_rotate(&m, 0, 1, 0, theta);//沿y轴转
 // 	matrix_set_rotate(&m, 1,0 , 0, theta);//沿x轴转
 	matrix_set_rotate(&m, 0, 0, 1, theta);//沿z轴转
-// 	matrix_set_rotate(&m, -1, -0.5, 1, theta);//算旋转矩阵
+	matrix_set_rotate(&m, -1, -0.5, 1, theta);//算旋转矩阵
 	transformMatrix.world = m;
 	UpdateMVPMatrix();//更新矩阵
 }
