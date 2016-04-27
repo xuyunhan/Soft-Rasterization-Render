@@ -56,7 +56,7 @@ Vertex cube_NDC_space[8] =
 
 Pos cube_world_space[8];
 Pos cube_camera_space[8];
-float eye_x = 4, y = 0, z = 0;
+float eye_x = 1.1, y = 0, z = 0;
 
 unsigned int **framebufferPtr;      // 像素缓存：framebuffePtr[y] 代表第 y行
 float **zbufferPtr;//深度缓冲
@@ -153,10 +153,11 @@ Color_float GetTexture(float u, float v)
 
 #endif // 0
 #if 0 //无插值
-	result->r = texbufferPtr[(int)u][(int)v].r;
-	result->g = texbufferPtr[(int)u][(int)v].g;
-	result->b = texbufferPtr[(int)u][(int)v].b;
-	return;
+	Color_float result = { 0, 0, 0 };
+	result.r = texbufferPtr[(int)u][(int)v].r;
+	result.g = texbufferPtr[(int)u][(int)v].g;
+	result.b = texbufferPtr[(int)u][(int)v].b;
+	return result;
 #endif//	return a;
 
 }
@@ -177,7 +178,7 @@ Pos point_light_camera;
 Pos t1;
 Pos point_light_world = { 3.0f, 0, 0, 1};
 
-void DrawPixel(Color_float color, Vertex * p1, Vertex* p2, Vertex* p3, int x, int y, float deltaZperX, float deltaZperY, Vector * triangleNormal_rotated_camera_normalized)
+void DrawPixel(Vertex * p1, Vertex* p2, Vertex* p3, int x, int y, float deltaZperX, float deltaZperY, Vector * triangleNormal_rotated_camera_normalized)
 {
 	Vector L;
 	const float x1 = p1->pos.x;
@@ -248,7 +249,7 @@ void DrawPixel(Color_float color, Vertex * p1, Vertex* p2, Vertex* p3, int x, in
 	}
 }
 
-void DrawFlatBottomTriangle(Color_float c, Pos * pointTop, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
+void DrawFlatBottomTriangle(Pos * pointTop, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
 {
 	int xtop = pointTop->x, xleft = pointLeft->x, xright = pointRight->x, ytop = pointTop->y, ybtm = pointLeft->y;//平底三角形，pointLeft和pointRight的y都是ybtm
 
@@ -276,11 +277,16 @@ void DrawFlatBottomTriangle(Color_float c, Pos * pointTop, Pos * pointLeft, Pos 
 	float xielv1 = (float)dx1 / (float)dy1;
 	float xielv2 = (float)dx2 / (float)dy2;
 	int x, y;
+// 	if (xleft < 1) {
+// 		xleft = 1; printf("xleft %d\n", xleft);
+// 	}
+// 	if (xright>799) {xright = 799; printf("xright %d\n", xright); }
+	int ybtmUncut = ybtm, ytopUncut = ytop;
+	if (ytop < 1) ytop = 1;
+	if (ybtm > 599)ybtm = 599;
 // 	if (xleft < 1) xleft = 1;
-// 	if (xright>799) xright = 799;
-// 	if (ytop < 1) ytop = 1;
-// 	if (ybtm > 599)ybtm = 599;
-// 	getchar();
+// 	if (xright>799) { xright = 799; }
+
 	int x1tmp = xleft, x2tmp = xright;
 	for (y = ybtm; y > ytop; y--)
 	{
@@ -295,22 +301,19 @@ void DrawFlatBottomTriangle(Color_float c, Pos * pointTop, Pos * pointLeft, Pos 
 // 			error2 -= 2 * dy2;
 // 		}
 
-		x1tmp = xleft + ((float)(ybtm - y))*xielv1;
-		x2tmp = xright + ((float)(ybtm - y))*xielv2;
+		x1tmp = xleft + ((float)(ybtmUncut - y))*xielv1;
+		x2tmp = xright + ((float)(ybtmUncut - y))*xielv2;
+		if (x1tmp < 1) x1tmp = 1;
+		if (x1tmp>799) { x1tmp = 799; }
+		if (x2tmp < 1) x2tmp = 1;
+		if (x2tmp>799) { x2tmp = 799; }
+
 		int dx = x2tmp - x1tmp;
 #pragma omp parallel for private(x) num_threads(4)
 		for (x = x1tmp; x <= x2tmp; x++)
 // 		for (x = xleft+xielv1*(float)(y; x <= x2tmp; x++)
 		{
-// 			if (x<0&&)
-// 			{
-// 
-// 			}
-			if (x <0 || x>799 || y<0 || y>599)
-			{
-				continue;;
-			}
-			DrawPixel(c,p1, p2, p3, x, y, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized);
+			DrawPixel(p1, p2, p3, x, y, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized);
 		}
 
 		error1 += 2 * dx1;
@@ -318,7 +321,7 @@ void DrawFlatBottomTriangle(Color_float c, Pos * pointTop, Pos * pointLeft, Pos 
 	}
 }
 
-void DrawFlatTopTriangle(Color_float c, Pos * pointBottom, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
+void DrawFlatTopTriangle(Pos * pointBottom, Pos * pointLeft, Pos * pointRight, float deltaZperX, float deltaZperY, Vector *triangleNormal_rotated_camera_normalized, Vertex *p1, Vertex* p2, Vertex* p3)
 {
 	int xbottom = pointBottom->x, xleft = pointLeft->x, xright = pointRight->x, ytop = pointBottom->y, ybtm = pointLeft->y;
 	int dx1 = xbottom - xleft;
@@ -352,6 +355,9 @@ void DrawFlatTopTriangle(Color_float c, Pos * pointBottom, Pos * pointLeft, Pos 
 // 	if (xright>799) xright = 799;
 // 	if (ybtm < 0) ybtm = 0;
 // 	if (ytop > 599)ytop = 599;
+	int ybtmUncut = ybtm, ytopUncut = ytop;
+	if (ybtm < 0) ybtm = 0;
+	if (ytop > 599)ytop = 599;
 	int x1tmp = xleft, x2tmp = xright;
 
 // 			x2tmp -= xstep2;
@@ -371,17 +377,15 @@ void DrawFlatTopTriangle(Color_float c, Pos * pointBottom, Pos * pointLeft, Pos 
 // 		}
 			
 		int dx = x2tmp - x1tmp;
-		x1tmp = xleft + ((float)(y-ybtm))*xielv1;
-		x2tmp = xright + ((float)(y - ybtm))*xielv2;
+		x1tmp = xleft + ((float)(y - ybtmUncut))*xielv1;
+		x2tmp = xright + ((float)(y - ybtmUncut))*xielv2;
+		if (x1tmp < 1) x1tmp = 1; if (x1tmp > 799) x1tmp = 799;
+		if (x2tmp < 1) x2tmp = 1; if (x2tmp > 799) x2tmp = 799;
 
 #pragma omp parallel for private(x) num_threads(4)
 		for ( x = x1tmp; x <= x2tmp; x++)
 		{
-			if (x <0 || x>799 || y<0 || y>599)
-			{
-				continue;;
-			}
-			DrawPixel(c,p1, p2, p3, x, y, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized);
+			DrawPixel(p1, p2, p3, x, y, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized);
 		}
 
 		error1 += 2 * dx1;
@@ -447,16 +451,17 @@ void DrawPrimitive(Vertex *p1, Vertex* p2, Vertex* p3, Vector* triangleNormal_ro
 // 	{
 // 	pointLeft->x = floorf(pointLeft->x); ptop->x = floorf(ptop->x); pbottom->x = floorf(pbottom->x); pointRight->x = floorf(pointRight->x);
 
-	//test
-	Pos *toptest = (Pos*)malloc(sizeof(Pos));
-	Pos *btmtest = (Pos*)malloc(sizeof(Pos));
-	toptest->z = pbottom->z; toptest->y = 473;
-	int c1 = 100;// rand() % 255;
-	Color_float c3 = { ((float)c1)/255.0f,0,0 };
-	c1 = 100;// rand() % 255;
-	Color_float c2 = { 0,0,((float)c1) / 255.0f };
-	DrawFlatTopTriangle(c3,pbottom, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);//第一次调用这个return，因为先画的是平底
-		DrawFlatBottomTriangle(c2,ptop, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);//第二次调用这个return，因为第二次调用DrawPrimitive画的是平顶
+// 	//test
+// 	Pos *toptest = (Pos*)malloc(sizeof(Pos));
+// 	Pos *btmtest = (Pos*)malloc(sizeof(Pos));
+// 	toptest->z = pbottom->z; toptest->y = 473;
+// 	int c1 = 100;// rand() % 255;
+// 	Color_float c3 = { ((float)c1)/255.0f,0,0 };
+// 	c1 = 100;// rand() % 255;
+// 	Color_float c2 = { 0,0,((float)c1) / 255.0f };
+	DrawFlatTopTriangle(pbottom, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);//第一次调用这个return，因为先画的是平底
+	DrawFlatBottomTriangle(ptop, pointLeft, pointRight, deltaZperX, deltaZperY, triangleNormal_rotated_camera_normalized, p1, p2, p3);//第二次调用这个return，因为第二次调用DrawPrimitive画的是平顶
+
 //		getchar();
 // 	}
 
@@ -671,7 +676,7 @@ void BindFB(int width, int height, void *fb) {
 	zbuf = (char*)zbufferPtr;
 	texbuf = (char*)texbuffer;
 // 	ptr += width * height * 8;
-	//xuyunhan
+
 //  	screen_fb = (char*)malloc(800 * 600 * 4);
 // 	BITMAPINFO bi = { { sizeof(BITMAPINFOHEADER), 800, -600, 1, 32, BI_RGB,	800 * 600 * 4, 0, 0, 0, 0 } };
 // 	screen_hb = CreateDIBSection(screen_dc, &bi, DIB_RGB_COLORS, &screen_fb, 0, 0);
@@ -729,14 +734,6 @@ int  main()
 	SetCameraLookAt(&transformMatrix, eye_x, 0, 0);
 	while (1/*screen_exit == 0 && screen_keys[VK_ESCAPE] == 0*/)
 	{
-// 		if (screen_keys[VK_SPACE])
-// 			dir_light_or_point_light = -dir_light_or_point_light;
-// 		if (_switch == 1)
-// 			SetCameraLookAt(&transformMatrix, 3, 0, 0);
-// 		else if (_switch == -1)
-// 			SetCameraLookAt(&transformMatrix, -3, 0, 0);
-// 		if (screen_keys[VK_LEFT])
-
 		if (screen_keys[VK_UP])
 		{
 			eye_x -= 0.02f;
