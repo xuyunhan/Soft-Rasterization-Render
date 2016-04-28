@@ -1,6 +1,15 @@
 #pragma once
 #include <math.h>
-//=====================================================================
+#include <mmintrin.h> //MMX  
+#include <xmmintrin.h> //SSE(include mmintrin.h)  
+#include <emmintrin.h> //SSE2(include xmmintrin.h)  
+#include <pmmintrin.h> //SSE3(include emmintrin.h)  
+#include <tmmintrin.h>//SSSE3(include pmmintrin.h)  
+#include <smmintrin.h>//SSE4.1(include tmmintrin.h)  
+#include <nmmintrin.h>//SSE4.2(include smmintrin.h)  
+#include <wmmintrin.h>//AES(include nmmintrin.h)  
+#include <immintrin.h>//AVX(include wmmintrin.h)  
+#include <intrin.h>//(include immintrin.h)  //=====================================================================
 // 数学库：此部分应该不用详解，熟悉 D3D 矩阵变换即可
 //=====================================================================
 typedef struct { float m[4][4]; } matrix_t;
@@ -12,10 +21,21 @@ int CMID(int x, int min, int max) { return (x < min) ? min : ((x > max) ? max : 
 // 计算插值：t 为 [0, 1] 之间的数值
 float interp(float x1, float x2, float t) { return x1 + (x2 - x1) * t; }
 
-// | v |
+float InvSqrt(float x)
+{
+	float xhalf = 0.5f*x;
+	int i = *(int*)&x;         // get bits for floating value
+	i = 0x5f375a86 - (i >> 1); // hidden initial guess
+	x = *(float*)&i;          // convert bits back to float
+	x = x*(1.5f - xhalf*x*x); // Newton step, repeating increases accuracy
+							  //    x = x*(1.5f-xhalf*x*x); // add this in for added precision, or many more...
+	return x;
+} // InvSqrt
+
+//| v |
 float vector_length(const Pos *v) {
 	float sq = v->x * v->x + v->y * v->y + v->z * v->z;
-	return (float)sqrt(sq);
+	return (float)sqrtf(sq);
 }
 
 // z = x + y
@@ -43,9 +63,21 @@ Pos vector_multply(const Pos *x, const float y) {
 	return z;
 }
 
-
 // 矢量点乘
 float vector_dotproduct(const Pos *x, const Pos *y) {
+
+#if 0 //用SSE指令求，实际上这样存进去再求积再求和太慢了，还不如直接算
+	float x_float[4] = { x->x,x->y,x->z, 0 }, y_float[4] = { y->x,y->y,y->z, 0 };
+	__m128 mmx = _mm_load_ps(x_float);
+	__m128 mmy = _mm_load_ps(y_float);
+	__m128 lenSq = _mm_mul_ps(mmx, mmy);
+//下面求平方的和
+// xx = { xx3, xx2, xx1, xx0 }
+	lenSq = _mm_hadd_ps(lenSq, lenSq);// xx = {xx3+xx2, xx1+xx0, xx3+xx2, xx1+xx0}
+	lenSq = _mm_hadd_ps(lenSq, lenSq);// xx = {xx2+xx3+xx1+xx0, xx3+xx2+xx1+xx0, xx3+xx2+xx1+xx0, xx3+xx2+xx1+xx0}
+	float r; _mm_store_ss(&r, lenSq);
+	return r;
+#endif	
 	return x->x * y->x + x->y * y->y + x->z * y->z;
 }
 
@@ -71,9 +103,28 @@ void vector_interp(Pos *z, const Pos *x1, const Pos *x2, float t) {
 
 // 矢量归一化
 void vector_normalize(Pos *v) {
-	float length = vector_length(v);
-	if (length != 0.0f) {
-		float inv = 1.0f / length;
+//	float v_float[4] = { v->x,v->y,v->z, 0 }, fzero=0;
+// 	__m128 mmv = _mm_load_ps(v_float);
+// 	__m128 lenSq = _mm_mul_ps(mmv, mmv);
+	//下面求平方的和
+	// xx = { xx3, xx2, xx1, xx0 }
+// 	lenSq = _mm_hadd_ps(lenSq, lenSq);// xx = {xx3+xx2, xx1+xx0, xx3+xx2, xx1+xx0}
+// 	lenSq = _mm_hadd_ps(lenSq, lenSq);// xx = {xx2+xx3+xx1+xx0, xx3+xx2+xx1+xx0, xx3+xx2+xx1+xx0, xx3+xx2+xx1+xx0}
+// 	__m128 zero = _mm_load_ss(&fzero);
+	const float lengthSq = v->x * v->x + v->y * v->y + v->z * v->z;
+//	float length = vector_length(v);
+// 	if (_mm_iszero_ss(lengthSq)) {
+	if ((*(int*)&lengthSq) != 0) {
+	
+//	__m128i vcmp = _mm_castps_si128(_mm_cmpneq_ss(lenSq, zero)); // compare a, b for inequality
+//	unsigned int test = _mm_movemask_epi8(vcmp); // extract results of comparison
+	//if (test != 0xffff) {
+//	if (_mm_cmpneq_ss(lenSq,zero) & 0xffffffff) {
+		float inv;// = InvSqrt(lengthSq);
+	//	float inv = 1.0f / length;
+	__m128 in = _mm_load_ss(&lengthSq);
+	//in = _mm_rsqrt_ss(lenSq);
+	_mm_store_ss(&inv, _mm_rsqrt_ss(in));
 		v->x *= inv;
 		v->y *= inv;
 		v->z *= inv;
